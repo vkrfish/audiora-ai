@@ -14,16 +14,521 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audio_posts: {
+        Row: {
+          audio_url: string | null
+          comments_count: number | null
+          cover_url: string | null
+          created_at: string | null
+          duration: number | null
+          id: string
+          is_published: boolean | null
+          likes_count: number | null
+          plays_count: number | null
+          shares_count: number | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          comments_count?: number | null
+          cover_url?: string | null
+          created_at?: string | null
+          duration?: number | null
+          id?: string
+          is_published?: boolean | null
+          likes_count?: number | null
+          plays_count?: number | null
+          shares_count?: number | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          comments_count?: number | null
+          cover_url?: string | null
+          created_at?: string | null
+          duration?: number | null
+          id?: string
+          is_published?: boolean | null
+          likes_count?: number | null
+          plays_count?: number | null
+          shares_count?: number | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      comments: {
+        Row: {
+          audio_post_id: string | null
+          audio_url: string | null
+          content: string | null
+          created_at: string | null
+          id: string
+          parent_id: string | null
+          podcast_id: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_post_id?: string | null
+          audio_url?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          parent_id?: string | null
+          podcast_id?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_post_id?: string | null
+          audio_url?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          parent_id?: string | null
+          podcast_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_audio_post_id_fkey"
+            columns: ["audio_post_id"]
+            isOneToOne: false
+            referencedRelation: "audio_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      follows: {
+        Row: {
+          created_at: string | null
+          follower_id: string
+          following_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          follower_id: string
+          following_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          follower_id?: string
+          following_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      likes: {
+        Row: {
+          audio_post_id: string | null
+          created_at: string | null
+          id: string
+          podcast_id: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_post_id?: string | null
+          created_at?: string | null
+          id?: string
+          podcast_id?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_post_id?: string | null
+          created_at?: string | null
+          id?: string
+          podcast_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "likes_audio_post_id_fkey"
+            columns: ["audio_post_id"]
+            isOneToOne: false
+            referencedRelation: "audio_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "likes_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listening_history: {
+        Row: {
+          audio_post_id: string | null
+          completed: boolean | null
+          created_at: string | null
+          id: string
+          last_played_at: string | null
+          podcast_id: string | null
+          progress_seconds: number | null
+          user_id: string
+        }
+        Insert: {
+          audio_post_id?: string | null
+          completed?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_played_at?: string | null
+          podcast_id?: string | null
+          progress_seconds?: number | null
+          user_id: string
+        }
+        Update: {
+          audio_post_id?: string | null
+          completed?: boolean | null
+          created_at?: string | null
+          id?: string
+          last_played_at?: string | null
+          podcast_id?: string | null
+          progress_seconds?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listening_history_audio_post_id_fkey"
+            columns: ["audio_post_id"]
+            isOneToOne: false
+            referencedRelation: "audio_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listening_history_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlist_items: {
+        Row: {
+          added_at: string | null
+          audio_post_id: string | null
+          id: string
+          playlist_id: string
+          podcast_id: string | null
+          position: number
+        }
+        Insert: {
+          added_at?: string | null
+          audio_post_id?: string | null
+          id?: string
+          playlist_id: string
+          podcast_id?: string | null
+          position: number
+        }
+        Update: {
+          added_at?: string | null
+          audio_post_id?: string | null
+          id?: string
+          playlist_id?: string
+          podcast_id?: string | null
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_items_audio_post_id_fkey"
+            columns: ["audio_post_id"]
+            isOneToOne: false
+            referencedRelation: "audio_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_items_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_items_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlists: {
+        Row: {
+          cover_url: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          is_public: boolean | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cover_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cover_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_public?: boolean | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      podcasts: {
+        Row: {
+          audio_url: string | null
+          chapters: Json | null
+          comments_count: number | null
+          cover_url: string | null
+          created_at: string | null
+          description: string | null
+          duration: number | null
+          id: string
+          is_ai_generated: boolean | null
+          is_published: boolean | null
+          language: string | null
+          likes_count: number | null
+          plays_count: number | null
+          shares_count: number | null
+          tags: string[] | null
+          title: string
+          tone: string | null
+          transcript: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_url?: string | null
+          chapters?: Json | null
+          comments_count?: number | null
+          cover_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          id?: string
+          is_ai_generated?: boolean | null
+          is_published?: boolean | null
+          language?: string | null
+          likes_count?: number | null
+          plays_count?: number | null
+          shares_count?: number | null
+          tags?: string[] | null
+          title: string
+          tone?: string | null
+          transcript?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_url?: string | null
+          chapters?: Json | null
+          comments_count?: number | null
+          cover_url?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration?: number | null
+          id?: string
+          is_ai_generated?: boolean | null
+          is_published?: boolean | null
+          language?: string | null
+          likes_count?: number | null
+          plays_count?: number | null
+          shares_count?: number | null
+          tags?: string[] | null
+          title?: string
+          tone?: string | null
+          transcript?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          audio_bio_url: string | null
+          avatar_url: string | null
+          bio: string | null
+          category: string | null
+          created_at: string | null
+          followers_count: number | null
+          following_count: number | null
+          full_name: string | null
+          id: string
+          interests: string[] | null
+          is_creator: boolean | null
+          is_verified: boolean | null
+          preferred_language: string | null
+          updated_at: string | null
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          audio_bio_url?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          category?: string | null
+          created_at?: string | null
+          followers_count?: number | null
+          following_count?: number | null
+          full_name?: string | null
+          id?: string
+          interests?: string[] | null
+          is_creator?: boolean | null
+          is_verified?: boolean | null
+          preferred_language?: string | null
+          updated_at?: string | null
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          audio_bio_url?: string | null
+          avatar_url?: string | null
+          bio?: string | null
+          category?: string | null
+          created_at?: string | null
+          followers_count?: number | null
+          following_count?: number | null
+          full_name?: string | null
+          id?: string
+          interests?: string[] | null
+          is_creator?: boolean | null
+          is_verified?: boolean | null
+          preferred_language?: string | null
+          updated_at?: string | null
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      saved_content: {
+        Row: {
+          audio_post_id: string | null
+          created_at: string | null
+          id: string
+          podcast_id: string | null
+          user_id: string
+        }
+        Insert: {
+          audio_post_id?: string | null
+          created_at?: string | null
+          id?: string
+          podcast_id?: string | null
+          user_id: string
+        }
+        Update: {
+          audio_post_id?: string | null
+          created_at?: string | null
+          id?: string
+          podcast_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_content_audio_post_id_fkey"
+            columns: ["audio_post_id"]
+            isOneToOne: false
+            referencedRelation: "audio_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_content_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      search_history: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          id: string
+          query: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          query: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          id?: string
+          query?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +655,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
