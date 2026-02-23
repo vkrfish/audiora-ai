@@ -77,8 +77,8 @@ const Login = () => {
       <div className="w-full max-w-md relative z-10 animate-fade-in-up">
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center overflow-hidden shadow-glow">
-            <img src="/favicon.jpeg" alt="Audiora Logo" className="w-full h-full object-cover" />
+          <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
+            <Headphones className="w-6 h-6 text-primary-foreground" />
           </div>
           <span className="font-display font-bold text-2xl gradient-text">
             Audiora

@@ -117,8 +117,8 @@ const Index = () => {
           <div className="max-w-4xl mx-auto text-center">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-primary flex items-center justify-center overflow-hidden shadow-glow">
-                <img src="/favicon.jpeg" alt="Audiora Logo" className="w-full h-full object-cover" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
+                <Headphones className="w-7 h-7 text-primary-foreground" />
               </div>
               <span className="font-display font-bold text-3xl gradient-text">
                 Audiora
@@ -381,8 +381,8 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center overflow-hidden">
-                <img src="/favicon.jpeg" alt="Audiora Logo" className="w-full h-full object-cover" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+                <Headphones className="w-4 h-4 text-primary-foreground" />
               </div>
               <span className="font-display font-bold text-lg">Audiora</span>
             </div>
