@@ -28,7 +28,7 @@ interface PodcastScript {
 }
 
 export const generatePodcast = async (params: GeneratePodcastParams): Promise<PodcastScript> => {
-  const BACKEND_URL = 'http://localhost:3001';
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
   const {
     inputType, topic, content, fileContent, outputLanguage,
@@ -134,7 +134,7 @@ Remember to output valid JSON only, no markdown code blocks.`;
 };
 
 export const generateAudio = async (text: string, language: string = 'en', voice?: string, voice2?: string): Promise<{ audioContent: string; mimeType: string }> => {
-  const BACKEND_URL = 'http://localhost:3001';
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
