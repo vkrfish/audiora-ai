@@ -118,7 +118,7 @@ const Index = () => {
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8 animate-fade-in">
               <div className="w-14 h-14 rounded-2xl overflow-hidden bg-background flex items-center justify-center shadow-glow border border-border/50">
-                <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
+                <img src="/logo.png" alt="Audiora" className="w-full h-full object-contain p-2" />
               </div>
               <span className="font-display font-bold text-3xl gradient-text">
                 Audiora
@@ -382,7 +382,7 @@ const Index = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg overflow-hidden bg-background flex items-center justify-center border border-border/50">
-                <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
+                <img src="/logo.png" alt="Audiora" className="w-full h-full object-contain p-1" />
               </div>
               <span className="font-display font-bold text-lg">Audiora</span>
             </div>

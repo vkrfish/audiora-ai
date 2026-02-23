@@ -78,7 +78,7 @@ const Login = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <div className="w-12 h-12 rounded-xl overflow-hidden bg-background flex items-center justify-center shadow-glow border border-border/50">
-            <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
+            <img src="/logo.png" alt="Audiora" className="w-full h-full object-contain p-1" />
           </div>
           <span className="font-display font-bold text-2xl gradient-text">
             Audiora

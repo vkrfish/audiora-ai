@@ -75,7 +75,7 @@ const Navbar = () => {
           <Link to="/" className="flex items-center gap-2 group">
             <div className="relative">
               <div className="w-10 h-10 rounded-xl overflow-hidden bg-background flex items-center justify-center shadow-glow-sm group-hover:shadow-glow transition-shadow duration-300 border border-border/50">
-                <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
+                <img src="/logo.png" alt="Audiora" className="w-full h-full object-contain p-1" />
               </div>
             </div>
             <span className="font-display font-bold text-xl gradient-text">Audiora</span>
