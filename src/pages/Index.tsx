@@ -1,12 +1,12 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { 
-  Play, 
-  Mic, 
-  FileText, 
-  Globe, 
-  Zap, 
-  Users, 
+import {
+  Play,
+  Mic,
+  FileText,
+  Globe,
+  Zap,
+  Users,
   Sparkles,
   ArrowRight,
   Headphones,
@@ -117,8 +117,8 @@ const Index = () => {
           <div className="max-w-4xl mx-auto text-center">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8 animate-fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
-                <Headphones className="w-7 h-7 text-primary-foreground" />
+              <div className="w-14 h-14 rounded-2xl overflow-hidden bg-background flex items-center justify-center shadow-glow border border-border/50">
+                <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
               </div>
               <span className="font-display font-bold text-3xl gradient-text">
                 Audiora
@@ -142,7 +142,7 @@ const Index = () => {
                   <div
                     key={i}
                     className="w-1.5 bg-gradient-to-t from-primary to-accent rounded-full waveform-bar"
-                    style={{ 
+                    style={{
                       height: `${30 + Math.sin(i * 0.5) * 70}%`,
                       animationDelay: `${i * 0.1}s`
                     }}
@@ -228,7 +228,7 @@ const Index = () => {
       {/* Create Section */}
       <section className="py-24 relative">
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1/2 h-96 bg-primary/10 blur-3xl rounded-full" />
-        
+
         <div className="container mx-auto px-4 relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -277,18 +277,18 @@ const Index = () => {
                   </div>
                   <span className="text-sm text-muted-foreground">Podcast Generator</span>
                 </div>
-                
+
                 <div className="space-y-3">
                   <div className="glass-card p-3 flex items-center gap-3">
                     <Mic className="w-5 h-5 text-primary" />
                     <span className="text-sm">The future of renewable energy...</span>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Sparkles className="w-4 h-4 text-accent animate-pulse" />
                     <span>AI generating script...</span>
                   </div>
-                  
+
                   <div className="glass-card p-4">
                     <div className="flex items-center gap-3 mb-3">
                       <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
@@ -357,7 +357,7 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-accent/10" />
-            
+
             <div className="relative z-10">
               <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
                 Ready to Create Your First Podcast?
@@ -381,19 +381,19 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-                <Headphones className="w-4 h-4 text-primary-foreground" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-background flex items-center justify-center border border-border/50">
+                <img src="/logo.png" alt="Audiora" className="w-full h-full object-cover scale-[1.3] translate-y-[-5%]" />
               </div>
               <span className="font-display font-bold text-lg">Audiora</span>
             </div>
-            
+
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
               <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
               <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
             </div>
-            
+
             <p className="text-sm text-muted-foreground">
               © 2024 Audiora. All rights reserved.
             </p>
