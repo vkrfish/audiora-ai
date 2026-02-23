@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { 
-  User, 
-  Bell, 
-  Shield, 
-  Globe, 
-  Palette, 
-  Volume2, 
+import {
+  User,
+  Bell,
+  Shield,
+  Globe,
+  Palette,
+  Volume2,
   CreditCard,
   ChevronRight,
   LogOut
@@ -23,85 +23,174 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { useSettings } from "@/contexts/SettingsContext";
+import { EditProfileModal } from "@/components/modals/EditProfileModal";
+import { BlockedUsersModal } from "@/components/modals/BlockedUsersModal";
+import { useAuth } from "@/hooks/useAuth";
 
 const Settings = () => {
-  const [notifications, setNotifications] = useState({
-    newFollowers: true,
-    likes: true,
-    comments: true,
-    newEpisodes: true,
-    marketing: false
-  });
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { settings, updateSettings, loading: settingsLoading } = useSettings();
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isViewingBlocked, setIsViewingBlocked] = useState(false);
 
-  const [audioSettings, setAudioSettings] = useState({
-    autoPlay: true,
-    backgroundPlay: true,
-    defaultSpeed: "1"
-  });
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out successfully");
+    navigate('/login');
+  };
 
-  const settingsSections = [
+  const handleResetPassword = async () => {
+    if (!user?.email) return toast.error("No email associated with this user.");
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Password reset email sent! Check your inbox.");
+    }
+  };
+
+  const accountItems = [
+    { label: "Edit Profile", onClick: () => setIsEditingProfile(true) },
+    { label: "Change Password", onClick: handleResetPassword },
     {
-      title: "Account",
-      icon: User,
-      items: [
-        { label: "Edit Profile", href: "#" },
-        { label: "Change Password", href: "#" },
-        { label: "Email Preferences", href: "#" }
-      ]
-    },
-    {
-      title: "Privacy & Security",
-      icon: Shield,
-      items: [
-        { label: "Privacy Settings", href: "#" },
-        { label: "Blocked Users", href: "#" },
-        { label: "Two-Factor Authentication", href: "#" }
-      ]
-    },
-    {
-      title: "Subscription",
-      icon: CreditCard,
-      items: [
-        { label: "Manage Subscription", href: "#" },
-        { label: "Billing History", href: "#" }
-      ]
+      label: "Email Preferences", onClick: () => {
+        document.getElementById('notifications-section')?.scrollIntoView({ behavior: 'smooth' });
+        toast.info("Adjust your marketing email preferences below.");
+      }
     }
   ];
+
+  const privSecItems = [
+    { label: "Blocked Users", onClick: () => setIsViewingBlocked(true) },
+    { label: "Two-Factor Authentication", onClick: () => toast.info("Supabase MFA integration coming soon.") }
+  ];
+
+  const subscriptionItems = [
+    { label: "Manage Subscription", onClick: () => toast.info("You are currently on the Free Tier.") },
+    { label: "Billing History", onClick: () => toast.info("No active payment method on file.") }
+  ];
+
+  if (settingsLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <h1 className="font-display text-2xl font-bold mb-8">Settings</h1>
 
-        {/* Account Sections */}
-        {settingsSections.map((section) => {
-          const Icon = section.icon;
-          return (
-            <div key={section.title} className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Icon className="w-5 h-5 text-primary" />
-                <h2 className="font-display font-semibold">{section.title}</h2>
+        {user && (
+          <>
+            <EditProfileModal
+              isOpen={isEditingProfile}
+              onClose={() => setIsEditingProfile(false)}
+              userId={user.id}
+            />
+            <BlockedUsersModal
+              isOpen={isViewingBlocked}
+              onClose={() => setIsViewingBlocked(false)}
+              userId={user.id}
+            />
+          </>
+        )}
+
+        {/* Account Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <User className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-semibold">Account</h2>
+          </div>
+          <div className="glass-card overflow-hidden">
+            {accountItems.map((item, i) => (
+              <button
+                key={item.label}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left",
+                  i !== accountItems.length - 1 && "border-b border-border"
+                )}
+                onClick={item.onClick}
+              >
+                <span>{item.label}</span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Privacy Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-semibold">Privacy & Security</h2>
+          </div>
+          <div className="glass-card p-4 space-y-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="isPrivate">Private Account</Label>
+                <p className="text-xs text-muted-foreground">Only your followers can see your content.</p>
               </div>
-              <div className="glass-card overflow-hidden">
-                {section.items.map((item, i) => (
-                  <button
-                    key={item.label}
-                    className={cn(
-                      "w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left",
-                      i !== section.items.length - 1 && "border-b border-border"
-                    )}
-                  >
-                    <span>{item.label}</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
+              <Switch
+                id="isPrivate"
+                checked={settings.isPrivate}
+                onCheckedChange={(checked) => updateSettings({ isPrivate: checked })}
+              />
             </div>
-          );
-        })}
+          </div>
+          <div className="glass-card overflow-hidden">
+            {privSecItems.map((item, i) => (
+              <button
+                key={item.label}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left",
+                  i !== privSecItems.length - 1 && "border-b border-border"
+                )}
+                onClick={item.onClick}
+              >
+                <span>{item.label}</span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Subscription Section */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <CreditCard className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-semibold">Subscription</h2>
+          </div>
+          <div className="glass-card overflow-hidden">
+            {subscriptionItems.map((item, i) => (
+              <button
+                key={item.label}
+                className={cn(
+                  "w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left",
+                  i !== subscriptionItems.length - 1 && "border-b border-border"
+                )}
+                onClick={item.onClick}
+              >
+                <span>{item.label}</span>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Notifications */}
-        <div className="mb-8">
+        <div className="mb-8" id="notifications-section">
           <div className="flex items-center gap-2 mb-4">
             <Bell className="w-5 h-5 text-primary" />
             <h2 className="font-display font-semibold">Notifications</h2>
@@ -111,9 +200,9 @@ const Settings = () => {
               <Label htmlFor="newFollowers">New followers</Label>
               <Switch
                 id="newFollowers"
-                checked={notifications.newFollowers}
+                checked={settings.notifications.newFollowers}
                 onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, newFollowers: checked })
+                  updateSettings({ notifications: { ...settings.notifications, newFollowers: checked } })
                 }
               />
             </div>
@@ -122,9 +211,9 @@ const Settings = () => {
               <Label htmlFor="likes">Likes on your content</Label>
               <Switch
                 id="likes"
-                checked={notifications.likes}
+                checked={settings.notifications.likes}
                 onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, likes: checked })
+                  updateSettings({ notifications: { ...settings.notifications, likes: checked } })
                 }
               />
             </div>
@@ -133,9 +222,9 @@ const Settings = () => {
               <Label htmlFor="comments">Comments and replies</Label>
               <Switch
                 id="comments"
-                checked={notifications.comments}
+                checked={settings.notifications.comments}
                 onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, comments: checked })
+                  updateSettings({ notifications: { ...settings.notifications, comments: checked } })
                 }
               />
             </div>
@@ -144,9 +233,9 @@ const Settings = () => {
               <Label htmlFor="newEpisodes">New episodes from followed creators</Label>
               <Switch
                 id="newEpisodes"
-                checked={notifications.newEpisodes}
+                checked={settings.notifications.newEpisodes}
                 onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, newEpisodes: checked })
+                  updateSettings({ notifications: { ...settings.notifications, newEpisodes: checked } })
                 }
               />
             </div>
@@ -155,9 +244,9 @@ const Settings = () => {
               <Label htmlFor="marketing">Marketing emails</Label>
               <Switch
                 id="marketing"
-                checked={notifications.marketing}
+                checked={settings.notifications.marketing}
                 onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, marketing: checked })
+                  updateSettings({ notifications: { ...settings.notifications, marketing: checked } })
                 }
               />
             </div>
@@ -175,9 +264,9 @@ const Settings = () => {
               <Label htmlFor="autoPlay">Auto-play next episode</Label>
               <Switch
                 id="autoPlay"
-                checked={audioSettings.autoPlay}
+                checked={settings.audio.autoPlay}
                 onCheckedChange={(checked) =>
-                  setAudioSettings({ ...audioSettings, autoPlay: checked })
+                  updateSettings({ audio: { ...settings.audio, autoPlay: checked } })
                 }
               />
             </div>
@@ -186,9 +275,9 @@ const Settings = () => {
               <Label htmlFor="backgroundPlay">Background playback</Label>
               <Switch
                 id="backgroundPlay"
-                checked={audioSettings.backgroundPlay}
+                checked={settings.audio.backgroundPlay}
                 onCheckedChange={(checked) =>
-                  setAudioSettings({ ...audioSettings, backgroundPlay: checked })
+                  updateSettings({ audio: { ...settings.audio, backgroundPlay: checked } })
                 }
               />
             </div>
@@ -196,9 +285,9 @@ const Settings = () => {
             <div className="flex items-center justify-between">
               <Label htmlFor="playbackSpeed">Default playback speed</Label>
               <Select
-                value={audioSettings.defaultSpeed}
+                value={settings.audio.defaultSpeed}
                 onValueChange={(value) =>
-                  setAudioSettings({ ...audioSettings, defaultSpeed: value })
+                  updateSettings({ audio: { ...settings.audio, defaultSpeed: value } })
                 }
               >
                 <SelectTrigger className="w-24">
@@ -226,7 +315,7 @@ const Settings = () => {
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
               <Label>Display Language</Label>
-              <Select defaultValue="en">
+              <Select value={settings.language} onValueChange={(v) => updateSettings({ language: v })}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -251,7 +340,7 @@ const Settings = () => {
           <div className="glass-card p-4">
             <div className="flex items-center justify-between">
               <Label>Theme</Label>
-              <Select defaultValue="dark">
+              <Select value={settings.theme} onValueChange={(v: any) => updateSettings({ theme: v })}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -266,7 +355,7 @@ const Settings = () => {
         </div>
 
         {/* Logout */}
-        <Button variant="outline" className="w-full text-destructive hover:text-destructive gap-2">
+        <Button onClick={handleLogout} variant="outline" className="w-full text-destructive hover:text-destructive gap-2">
           <LogOut className="w-4 h-4" />
           Sign out
         </Button>

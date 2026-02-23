@@ -1,73 +1,63 @@
-# Welcome to your Lovable project
+# Audiora - AI Personalized Podcast Platform
 
-## Project info
+Audiora is a cutting-edge platform that generates personalized podcasts based on your interests, using advanced AI for script generation and high-quality TTS for audio.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **AI Podcast Generation**: Create scripts in multiple languages (English, Telugu, etc.) with customizable tones.
+- **Multi-Speaker Support**: Choose between single-host or conversational formats with distinct voices.
+- **Social Discovery**: Follow other creators, share your podcasts to the global feed, and explore trending content.
+- **Customizable Experience**: Dark mode, adjustable playback speed, and personalized niche categories.
+- **Messaging & Notifications**: Stay connected with other creators through direct messages and real-time alerts.
 
-There are several ways of editing your application.
+## Project Structure
 
-**Use Lovable**
+- `/src`: Frontend React application (Vite, Tailwind CSS, shadcn/ui).
+- `/server`: Node.js backend for AI script generation and TTS processing.
+- `/supabase`: Database migrations and configuration.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js & npm
+- Supabase account
+- AI Provider API Keys (Gemini, OpenRouter)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Local Development
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+1. **Clone the repository**:
+   ```sh
+   git clone <YOUR_GIT_URL>
+   cd audiora-ai
+   ```
 
-Follow these steps:
+2. **Install dependencies**:
+   ```sh
+   npm install
+   cd server && npm install
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+3. **Set up Environment Variables**:
+   Create a `.env` file in both the root and `/server` directories with your Supabase and API credentials.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+4. **Start the Frontend**:
+   ```sh
+   npm run dev
+   ```
 
-# Step 3: Install the necessary dependencies.
-npm i
+5. **Start the Backend**:
+   ```sh
+   cd server
+   npm run dev
+   ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+## Technologies Used
 
-**Edit a file directly in GitHub**
+- **Frontend**: Vite, React, TypeScript, Tailwind CSS, shadcn-ui, Supabase Client.
+- **Backend**: Node.js, Express, Google Generative AI (Gemini), Microsoft Edge TTS.
+- **Database**: Supabase (PostgreSQL) with Row-Level Security (RLS).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Deployment
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The frontend can be deployed to platforms like Vercel or Netlify. The backend can be hosted on Render, Heroku, or any Node.js compatible environment.

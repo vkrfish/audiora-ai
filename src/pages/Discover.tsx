@@ -1,242 +1,187 @@
-import { useState } from "react";
-import { 
-  Search, 
-  TrendingUp, 
-  Clock, 
-  Sparkles, 
-  Globe,
-  ChevronRight,
-  X
-} from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Search, TrendingUp, UserPlus, UserCheck, Play, Headphones, Users } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import PodcastCard from "@/components/cards/PodcastCard";
-import CreatorCard from "@/components/cards/CreatorCard";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
+import { useAudio } from "@/contexts/AudioContext";
+import { Link } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+
+const avatarPlaceholder = "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop";
+const coverPodcast = "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop";
+const formatNum = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n);
 
 const Discover = () => {
+  const { user } = useAuth();
+  const audio = useAudio();
   const [searchQuery, setSearchQuery] = useState("");
-  const [recentSearches] = useState(["AI Technology", "Productivity tips", "Business strategy"]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [userResults, setUserResults] = useState<any[]>([]);
+  const [podcastResults, setPodcastResults] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
 
-  const categories = [
-    { id: "technology", name: "Technology", color: "bg-blue-500" },
-    { id: "business", name: "Business", color: "bg-green-500" },
-    { id: "lifestyle", name: "Lifestyle", color: "bg-pink-500" },
-    { id: "education", name: "Education", color: "bg-yellow-500" },
-    { id: "entertainment", name: "Entertainment", color: "bg-purple-500" },
-    { id: "health", name: "Health", color: "bg-red-500" },
-    { id: "science", name: "Science", color: "bg-cyan-500" },
-    { id: "arts", name: "Arts", color: "bg-orange-500" },
-  ];
+  // Load trending + suggested on mount
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: pods }, { data: users }] = await Promise.all([
+        supabase.from('podcasts')
+          .select('id, title, description, estimated_duration, likes_count, created_at, audio_files!inner(file_url), profiles(full_name)')
+          .eq('is_public', true)
+          .order('likes_count', { ascending: false }).limit(8),
+        supabase.from('profiles').select('id, full_name, username, avatar_url, followers_count, podcasts_count')
+          .neq('id', user?.id || '').limit(6)
+      ]);
+      setTrending(pods || []);
+      setSuggestedUsers(users || []);
 
-  const forYouPodcasts = [
-    {
-      title: "Building the Next Unicorn",
-      creator: "Startup Stories",
-      coverUrl: "https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=400&h=400&fit=crop",
-      duration: "28:45",
-      likes: 3421
-    },
-    {
-      title: "Deep Work Strategies",
-      creator: "Productivity Pro",
-      coverUrl: "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=400&h=400&fit=crop",
-      duration: "19:33",
-      likes: 2156
-    },
-    {
-      title: "Climate Tech Revolution",
-      creator: "Green Future",
-      coverUrl: "https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=400&h=400&fit=crop",
-      duration: "35:12",
-      likes: 1879
-    },
-    {
-      title: "The Psychology of Success",
-      creator: "Mind Matters",
-      coverUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
-      duration: "22:08",
-      likes: 2743
+      if (user) {
+        const { data: follows } = await supabase.from('user_follows').select('following_id').eq('follower_id', user.id);
+        setFollowingIds(new Set((follows || []).map((f: any) => f.following_id)));
+      }
+    };
+    load();
+  }, [user]);
+
+  const handleSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setSearched(false); setUserResults([]); setPodcastResults([]); return; }
+    setLoading(true);
+    setSearched(true);
+    const [{ data: users }, { data: pods }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, username, avatar_url, followers_count, podcasts_count')
+        .or(`full_name.ilike.%${q}%,username.ilike.%${q}%`).neq('id', user?.id || '').limit(10),
+      supabase.from('podcasts')
+        .select('id, title, description, estimated_duration, likes_count, audio_files!inner(file_url), profiles(full_name)')
+        .eq('is_public', true)
+        .ilike('title', `%${q}%`).limit(10)
+    ]);
+    setUserResults(users || []);
+    setPodcastResults(pods || []);
+    setLoading(false);
+  }, [user]);
+
+  const handleFollow = async (targetId: string) => {
+    if (!user) { toast.error("Sign in to follow"); return; }
+    if (followingIds.has(targetId)) {
+      await supabase.from('user_follows').delete().eq('follower_id', user.id).eq('following_id', targetId);
+      setFollowingIds(prev => { const n = new Set(prev); n.delete(targetId); return n; });
+    } else {
+      await supabase.from('user_follows').insert({ follower_id: user.id, following_id: targetId });
+      setFollowingIds(prev => new Set([...prev, targetId]));
+      await supabase.from('notifications').insert({ user_id: targetId, actor_id: user.id, type: 'follow' });
+      toast.success("Following!");
     }
-  ];
+  };
 
-  const trendingCreators = [
-    {
-      name: "Alex Morgan",
-      username: "alextalks",
-      avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop",
-      category: "Tech News",
-      followers: 234000,
-      totalListens: 8900000,
-      isVerified: true
-    },
-    {
-      name: "Jessica Liu",
-      username: "jessicapod",
-      avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
-      category: "Wellness",
-      followers: 189000,
-      totalListens: 6500000,
-      isVerified: true
-    },
-    {
-      name: "Michael Brooks",
-      username: "mikebrooks",
-      avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop",
-      category: "Finance",
-      followers: 156000,
-      totalListens: 5200000,
-      isVerified: false
-    }
-  ];
+  const UserCard = ({ u }: { u: any }) => (
+    <div className="glass-card p-4 flex items-center gap-3">
+      <Link to={`/profile/${u.id}`}>
+        <img src={u.avatar_url || avatarPlaceholder} className="w-12 h-12 rounded-full object-cover" alt={u.full_name} />
+      </Link>
+      <div className="flex-1 min-w-0">
+        <Link to={`/profile/${u.id}`}>
+          <p className="font-semibold text-sm hover:underline truncate">{u.full_name || `User ${u.id.substring(0, 8)}`}</p>
+        </Link>
+        <p className="text-xs text-muted-foreground">@{u.username || 'user'} · {formatNum(u.followers_count || 0)} followers</p>
+      </div>
+      <Button variant={followingIds.has(u.id) ? "outline" : "hero"} size="sm" onClick={() => handleFollow(u.id)}>
+        {followingIds.has(u.id) ? <><UserCheck className="w-3 h-3 mr-1" />Following</> : <><UserPlus className="w-3 h-3 mr-1" />Follow</>}
+      </Button>
+    </div>
+  );
 
-  const basedOnSearches = [
-    {
-      title: "Introduction to Machine Learning",
-      creator: "AI Academy",
-      coverUrl: "https://images.unsplash.com/photo-1555949963-aa79dcee981c?w=400&h=400&fit=crop",
-      duration: "42:15",
-      likes: 4521
-    },
-    {
-      title: "GPT and the Future of Work",
-      creator: "Tech Forward",
-      coverUrl: "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400&h=400&fit=crop",
-      duration: "26:33",
-      likes: 3298
-    }
-  ];
+  const PodcastCard = ({ p }: { p: any }) => {
+    const dur = `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`;
+    const audioUrl = p.audio_files?.[0]?.file_url;
+    return (
+      <div className="glass-card overflow-hidden group cursor-pointer" onClick={() => audioUrl && audio.playTrack({ id: p.id, title: p.title, creator: p.profiles?.full_name || 'Unknown', coverUrl: coverPodcast, audioUrl })}>
+        <div className="relative aspect-video">
+          <img src={coverPodcast} alt={p.title} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+            <Play className="w-8 h-8 text-foreground" />
+          </div>
+          <div className="absolute bottom-2 right-2 bg-background/80 px-1.5 py-0.5 rounded text-xs">{dur}</div>
+        </div>
+        <div className="p-3">
+          <p className="font-medium text-sm line-clamp-2">{p.title}</p>
+          <p className="text-xs text-muted-foreground mt-1">{p.profiles?.full_name || 'Unknown'} · {formatNum(p.likes_count || 0)} likes</p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Layout showPlayer>
-      <div className="container mx-auto px-4 py-6">
-        {/* Search Header */}
-        <div className="max-w-2xl mx-auto mb-8">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              placeholder="Search podcasts, creators, topics..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 pr-10 h-12 bg-card border-border text-base"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                onClick={() => setSearchQuery("")}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-
-          {/* Recent Searches */}
-          {!searchQuery && recentSearches.length > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Recent Searches</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {recentSearches.map((search) => (
-                  <Badge
-                    key={search}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => setSearchQuery(search)}
-                  >
-                    {search}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
+      <div className="container mx-auto px-4 py-6 max-w-4xl">
+        {/* Search */}
+        <div className="relative mb-8">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            placeholder="Search people or podcasts..."
+            className="pl-12 py-6 text-base"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); handleSearch(e.target.value); }}
+          />
         </div>
 
-        {/* Categories */}
-        <section className="mb-12">
-          <h2 className="font-display text-xl font-bold mb-4 flex items-center gap-2">
-            <Globe className="w-5 h-5 text-primary" />
-            Browse Categories
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategory(selectedCategory === category.id ? null : category.id)}
-                className={cn(
-                  "glass-card-hover p-4 text-center transition-all",
-                  selectedCategory === category.id && "ring-2 ring-primary"
-                )}
-              >
-                <div className={cn("w-3 h-3 rounded-full mx-auto mb-2", category.color)} />
-                <span className="font-medium text-sm">{category.name}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+        {loading && <div className="text-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto" /></div>}
 
-        {/* For You Section */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-xl font-bold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              For You
-            </h2>
-            <Button variant="ghost" size="sm" className="gap-1">
-              See all
-              <ChevronRight className="w-4 h-4" />
-            </Button>
+        {searched && !loading ? (
+          <div className="space-y-8">
+            {/* People results */}
+            {userResults.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-primary" />People</h2>
+                <div className="space-y-3">
+                  {userResults.map(u => <UserCard key={u.id} u={u} />)}
+                </div>
+              </section>
+            )}
+            {/* Podcast results */}
+            {podcastResults.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Headphones className="w-5 h-5 text-primary" />Podcasts</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {podcastResults.map(p => <PodcastCard key={p.id} p={p} />)}
+                </div>
+              </section>
+            )}
+            {userResults.length === 0 && podcastResults.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Search className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p>No results for "{searchQuery}"</p>
+              </div>
+            )}
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {forYouPodcasts.map((podcast, i) => (
-              <PodcastCard key={i} {...podcast} />
-            ))}
+        ) : !searched ? (
+          <div className="space-y-10">
+            {/* Suggested Creators */}
+            {suggestedUsers.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" />Suggested Creators</h2>
+                <div className="space-y-3">
+                  {suggestedUsers.map(u => <UserCard key={u.id} u={u} />)}
+                </div>
+              </section>
+            )}
+            {/* Trending Podcasts */}
+            {trending.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" />Trending Podcasts</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {trending.map(p => <PodcastCard key={p.id} p={p} />)}
+                </div>
+              </section>
+            )}
           </div>
-        </section>
-
-        {/* Based on Searches */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-xl font-bold flex items-center gap-2">
-              <Search className="w-5 h-5 text-primary" />
-              Based on Your Searches
-            </h2>
-            <Button variant="ghost" size="sm" className="gap-1">
-              See all
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {basedOnSearches.map((podcast, i) => (
-              <PodcastCard key={i} {...podcast} variant="compact" className="!p-4" />
-            ))}
-          </div>
-        </section>
-
-        {/* Trending Creators */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-display text-xl font-bold flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              Trending Creators
-            </h2>
-            <Button variant="ghost" size="sm" className="gap-1">
-              See all
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {trendingCreators.map((creator, i) => (
-              <CreatorCard key={i} {...creator} />
-            ))}
-          </div>
-        </section>
+        ) : null}
       </div>
     </Layout>
   );

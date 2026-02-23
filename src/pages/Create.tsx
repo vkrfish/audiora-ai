@@ -1,10 +1,10 @@
 import { useState, useRef } from "react";
-import { 
-  Mic, 
-  FileText, 
-  Upload, 
-  Globe, 
-  Clock, 
+import {
+  Mic,
+  FileText,
+  Upload,
+  Globe,
+  Clock,
   Sparkles,
   Play,
   Pause,
@@ -14,7 +14,8 @@ import {
   Check,
   Loader2,
   X,
-  FileUp
+  FileUp,
+  Users
 } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -34,11 +35,11 @@ import Waveform from "@/components/audio/Waveform";
 import { generatePodcast, generateAudio, readFileContent } from "@/lib/podcast-api";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { savePodcastToSupabase } from "@/lib/podcast-api";
 
-type InputType = "topic" | "content" | "file";
-type GenerationStep = "input" | "options" | "generating" | "complete";
+type InputType = "topic" | "content" | "file" | "record";
+type GenerationStep = "input" | "options" | "generating" | "review" | "complete";
 
 interface GeneratedPodcast {
   title: string;
@@ -63,17 +64,27 @@ const Create = () => {
   const [content, setContent] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [outputLanguage, setOutputLanguage] = useState("en");
+  const [podcastType, setPodcastType] = useState<"solo" | "conversation">("solo");
   const [duration, setDuration] = useState<"short" | "medium" | "long">("medium");
   const [tone, setTone] = useState<"educational" | "conversational" | "storytelling" | "professional">("conversational");
+  const [voice, setVoice] = useState("en-US-AvaMultilingualNeural");
+  const [voice2, setVoice2] = useState("en-US-AndrewMultilingualNeural");
+  const [niche, setNiche] = useState("technology");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const [step, setStep] = useState<GenerationStep>("input");
   const [progress, setProgress] = useState(0);
   const [progressText, setProgressText] = useState("");
   const [generatedPodcast, setGeneratedPodcast] = useState<GeneratedPodcast | null>(null);
-  
+  const [editableScript, setEditableScript] = useState("");
+
   const audioPlayer = useAudioPlayer();
 
   const languages = [
     { code: "en", name: "English" },
+    { code: "te", name: "Telugu" },
     { code: "es", name: "Spanish" },
     { code: "fr", name: "French" },
     { code: "de", name: "German" },
@@ -85,6 +96,7 @@ const Create = () => {
     { code: "ar", name: "Arabic" },
     { code: "hi", name: "Hindi" },
     { code: "ru", name: "Russian" },
+    { code: "te", name: "Telugu" }
   ];
 
   const durations = [
@@ -94,11 +106,76 @@ const Create = () => {
   ];
 
   const tones = [
-    { value: "educational" as const, label: "Educational", description: "Informative and structured" },
-    { value: "conversational" as const, label: "Conversational", description: "Casual and engaging" },
-    { value: "storytelling" as const, label: "Storytelling", description: "Narrative and immersive" },
-    { value: "professional" as const, label: "Professional", description: "Formal and authoritative" },
+    { value: "educational" as const, label: "Educational", description: "Informative and structured conversation between two experts" },
+    { value: "conversational" as const, label: "Conversational", description: "Casual and engaging conversation between two friends" },
+    { value: "storytelling" as const, label: "Storytelling", description: "Narrative and immersive conversation between two characters" },
+    { value: "professional" as const, label: "Professional", description: "Formal and authoritative conversation between two professionals" },
   ];
+
+  const niches = [
+    { id: "technology", name: "Technology" },
+    { id: "business", name: "Business" },
+    { id: "lifestyle", name: "Lifestyle" },
+    { id: "education", name: "Education" },
+    { id: "entertainment", name: "Entertainment" },
+    { id: "health", name: "Health" },
+    { id: "science", name: "Science" },
+    { id: "arts", name: "Arts" },
+  ];
+
+  const voices = [
+    { id: "en-US-AvaMultilingualNeural", name: "Ava (Female, Neutral)", gender: "Female" },
+    { id: "en-US-AndrewMultilingualNeural", name: "Andrew (Male, Neutral)", gender: "Male" },
+    { id: "en-US-EmmaMultilingualNeural", name: "Emma (Female, Friendly)", gender: "Female" },
+    { id: "en-US-BrianMultilingualNeural", name: "Brian (Male, Friendly)", gender: "Male" },
+    { id: "te-IN-ShrutiNeural", name: "Shruti (Telugu, Female)", gender: "Female" },
+    { id: "te-IN-MohanNeural", name: "Mohan (Telugu, Male)", gender: "Male" },
+  ];
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setRecordedAudio(audioBlob);
+
+        // Also load it for preview immediately
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          // remove data:audio/webm;base64, prefix
+          const base64str = base64data.split(',')[1];
+          audioPlayer.loadBase64Audio(base64str, 'audio/webm');
+        };
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start recording", err);
+      toast.error("Microphone access is required to record audio.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      // Stop all tracks to release mic
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -115,19 +192,62 @@ const Create = () => {
     if (inputType === "topic") return topic.trim().length > 10;
     if (inputType === "content") return content.trim().length > 50;
     if (inputType === "file") return uploadedFile !== null;
+    if (inputType === "record") return recordedAudio !== null;
     return false;
+  };
+
+  const handleNextFromInput = () => {
+    if (inputType === "record") {
+      // Direct jump to review/complete for recording since there's no script generation
+      setGeneratedPodcast({
+        title: "My Recorded Podcast",
+        description: "A custom personal voice recording.",
+        language: outputLanguage,
+        estimatedDuration: 0,
+        chapters: [],
+        fullScript: "Self-recorded audio.",
+        tags: [niche]
+      });
+      setStep("options");
+    } else {
+      setStep("options");
+    }
+  };
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveToLibrary = async (isPublic = false) => {
+    if (!generatedPodcast || !generatedPodcast.audioContent) return;
+
+    setIsSaving(true);
+    try {
+      const podcastToSave = {
+        ...generatedPodcast,
+        audioContent: generatedPodcast.audioContent as string,
+        audioMimeType: generatedPodcast.audioMimeType as string,
+        niche,
+        type: inputType === "record" ? "recorded" : "generated"
+      };
+      await savePodcastToSupabase(podcastToSave, isPublic);
+      toast.success(isPublic ? "Shared to Feed successfully!" : "Saved to your library!");
+    } catch (error) {
+      console.error('Failed to save podcast:', error);
+      toast.error("Failed to save podcast to cloud.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleGenerate = async () => {
     setStep("generating");
     setProgress(0);
     setProgressText("Preparing content...");
-    
+
     try {
       // Step 1: Prepare content
       setProgress(10);
       setProgressText("Analyzing your content...");
-      
+
       let fileContent = "";
       if (inputType === "file" && uploadedFile) {
         fileContent = await readFileContent(uploadedFile);
@@ -136,53 +256,95 @@ const Create = () => {
       // Step 2: Generate podcast script
       setProgress(30);
       setProgressText("AI is writing your podcast script...");
-      
+
+      // Pre-generation: Get voice names for character personas
+      const selectedVoice = voices.find(v => v.id === voice);
+      const selectedVoice2 = voices.find(v => v.id === voice2);
+
       const podcastScript = await generatePodcast({
         inputType,
-        topic: inputType === "topic" ? topic : undefined,
-        content: inputType === "content" ? content : undefined,
-        fileContent: inputType === "file" ? fileContent : undefined,
+        topic,
+        content,
+        fileContent,
         outputLanguage,
         duration,
         tone,
+        podcastType,
+        voiceName: selectedVoice?.name.split(' ')[0] || 'Host',
+        voice2Name: selectedVoice2?.name.split(' ')[0] || 'Guest'
       });
 
-      setProgress(60);
-      setProgressText("Generating audio from script...");
+      setGeneratedPodcast(podcastScript);
+      setEditableScript(podcastScript.fullScript);
 
-      // Step 3: Generate audio from script
-      try {
-        const audioResult = await generateAudio(podcastScript.fullScript, outputLanguage);
-        
-        setProgress(90);
-        setProgressText("Finalizing your podcast...");
+      setProgress(100);
+      setProgressText("Script ready for review!");
 
-        setGeneratedPodcast({
-          ...podcastScript,
-          audioContent: audioResult.audioContent,
-          audioMimeType: audioResult.mimeType,
-        });
+      setTimeout(() => setStep("review"), 500);
 
-        // Load audio into player
-        audioPlayer.loadBase64Audio(audioResult.audioContent, audioResult.mimeType);
-      } catch (audioError) {
-        console.error('Audio generation failed:', audioError);
-        // Still allow completion even if audio fails
-        setGeneratedPodcast({
-          ...podcastScript,
-        });
-        toast.error("Audio generation failed, but your script is ready!");
+    } catch (error) {
+      console.error('Generation error:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to generate script. Please try again.");
+      setStep("options");
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    if (!generatedPodcast) return;
+
+    setStep("generating");
+    setProgress(0);
+    setProgressText("Initializing conversion...");
+
+    try {
+      setProgress(30);
+      setProgressText("Converting script to audio...");
+
+      if (inputType === "record" && recordedAudio) {
+        // Bypass TTS generation completely if recording
+        const reader = new FileReader();
+        reader.readAsDataURL(recordedAudio);
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          // remove data:audio/webm;base64, prefix
+          const base64str = base64data.split(',')[1];
+          setGeneratedPodcast({
+            ...generatedPodcast,
+            audioContent: base64str,
+            audioMimeType: 'audio/webm',
+          });
+          setProgress(100);
+          setProgressText("Complete!");
+          setTimeout(() => setStep("complete"), 500);
+        };
+        return;
       }
+
+      // Use the edited script if available, fallback to the original full script
+      const finalScript = editableScript || generatedPodcast.fullScript;
+
+      const audioResult = await generateAudio(finalScript, outputLanguage, voice, podcastType === 'conversation' ? voice2 : undefined);
+
+      setProgress(90);
+      setProgressText("Finalizing your podcast...");
+
+      setGeneratedPodcast({
+        ...generatedPodcast,
+        audioContent: audioResult.audioContent,
+        audioMimeType: audioResult.mimeType,
+      });
+
+      // Load audio into player
+      audioPlayer.loadBase64Audio(audioResult.audioContent, audioResult.mimeType);
 
       setProgress(100);
       setProgressText("Complete!");
-      
+
       setTimeout(() => setStep("complete"), 500);
-      
     } catch (error) {
-      console.error('Generation error:', error);
-      toast.error(error instanceof Error ? error.message : "Failed to generate podcast. Please try again.");
-      setStep("options");
+      console.error('Audio generation failed:', error);
+      toast.error("Audio generation failed, but your script is still ready!");
+      setStep("review");
     }
   };
 
@@ -205,33 +367,7 @@ const Create = () => {
   };
 
   const handleShareToFeed = async () => {
-    if (!generatedPodcast || !user) {
-      toast.error("Please log in to share your podcast");
-      return;
-    }
-
-    try {
-      const { error } = await supabase.from('podcasts').insert({
-        user_id: user.id,
-        title: generatedPodcast.title,
-        description: generatedPodcast.description,
-        transcript: generatedPodcast.fullScript,
-        duration: generatedPodcast.estimatedDuration,
-        language: generatedPodcast.language,
-        tone: tone,
-        tags: generatedPodcast.tags,
-        chapters: generatedPodcast.chapters,
-        is_published: true,
-        is_ai_generated: true,
-      });
-
-      if (error) throw error;
-
-      toast.success("Podcast shared to your feed!");
-    } catch (error) {
-      console.error('Share error:', error);
-      toast.error("Failed to share podcast. Please try again.");
-    }
+    await saveToLibrary(true);
   };
 
   const renderInputStep = () => (
@@ -246,7 +382,7 @@ const Create = () => {
       </div>
 
       <Tabs value={inputType} onValueChange={(v) => setInputType(v as InputType)} className="w-full">
-        <TabsList className="grid grid-cols-3 mb-6">
+        <TabsList className="grid grid-cols-4 mb-6">
           <TabsTrigger value="topic" className="gap-2">
             <Mic className="w-4 h-4" />
             <span className="hidden sm:inline">Topic</span>
@@ -256,8 +392,12 @@ const Create = () => {
             <span className="hidden sm:inline">Content</span>
           </TabsTrigger>
           <TabsTrigger value="file" className="gap-2">
-            <Upload className="w-4 h-4" />
+            <FileUp className="w-4 h-4" />
             <span className="hidden sm:inline">Upload</span>
+          </TabsTrigger>
+          <TabsTrigger value="record" className="gap-2">
+            <Mic className="w-4 h-4" />
+            <span className="hidden sm:inline">Record</span>
           </TabsTrigger>
         </TabsList>
 
@@ -335,6 +475,70 @@ const Create = () => {
             )}
           </div>
         </TabsContent>
+
+        <TabsContent value="record" className="space-y-4">
+          <div className="glass-card p-6 text-center">
+            <Label className="text-base font-medium mb-6 block">
+              Record your own voice
+            </Label>
+
+            <div className="flex flex-col items-center justify-center gap-6">
+              {!isRecording ? (
+                <Button
+                  onClick={startRecording}
+                  size="lg"
+                  className="rounded-full w-24 h-24 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20"
+                >
+                  <Mic className="w-10 h-10 text-white" />
+                </Button>
+              ) : (
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex items-center gap-2 text-red-500 animate-pulse font-medium">
+                    <div className="w-3 h-3 rounded-full bg-red-500" />
+                    Recording...
+                  </div>
+                  <Button
+                    onClick={stopRecording}
+                    size="lg"
+                    className="rounded-full w-24 h-24 bg-secondary hover:bg-secondary/80 border-4 border-red-500"
+                  >
+                    <div className="w-8 h-8 bg-red-500 rounded-sm" />
+                  </Button>
+                </div>
+              )}
+
+              {recordedAudio && !isRecording && (
+                <div className="w-full mt-6 p-4 bg-secondary/50 rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="hero"
+                      size="icon"
+                      onClick={audioPlayer.toggle}
+                    >
+                      {audioPlayer.isPlaying ? (
+                        <Pause className="w-4 h-4" />
+                      ) : (
+                        <Play className="w-4 h-4 pl-0.5" />
+                      )}
+                    </Button>
+                    <div className="flex-1">
+                      <Waveform isPlaying={audioPlayer.isPlaying} barCount={20} className="h-8" />
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => {
+                      setRecordedAudio(null);
+                      audioPlayer.pause();
+                    }}>
+                      <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-6">
+              Skip text generation and use your directly recorded audio for the podcast.
+            </p>
+          </div>
+        </TabsContent>
       </Tabs>
 
       <div className="flex justify-end mt-6">
@@ -342,7 +546,7 @@ const Create = () => {
           variant="hero"
           size="lg"
           disabled={!canProceed()}
-          onClick={() => setStep("options")}
+          onClick={handleNextFromInput}
           className="gap-2"
         >
           Continue
@@ -363,7 +567,27 @@ const Create = () => {
         </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
+      <div className="grid md:grid-cols-2 gap-6 mb-8">
+        {/* Niche/Category */}
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe className="w-5 h-5 text-primary" />
+            <Label className="text-base font-medium">Topic Niche</Label>
+          </div>
+          <Select value={niche} onValueChange={setNiche}>
+            <SelectTrigger className="bg-secondary/50">
+              <SelectValue placeholder="Select primary category" />
+            </SelectTrigger>
+            <SelectContent>
+              {niches.map((n) => (
+                <SelectItem key={n.id} value={n.id}>
+                  {n.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Language */}
         <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -382,6 +606,125 @@ const Create = () => {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Communication Style */}
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-primary" />
+            <Label className="text-base font-medium">Communication Style</Label>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setPodcastType("solo")}
+              className={cn(
+                "p-3 rounded-lg border transition-all text-sm font-medium",
+                podcastType === "solo"
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-secondary/30 hover:bg-secondary/50"
+              )}
+            >
+              One-way (Solo)
+            </button>
+            <button
+              onClick={() => setPodcastType("conversation")}
+              className={cn(
+                "p-3 rounded-lg border transition-all text-sm font-medium",
+                podcastType === "conversation"
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-secondary/30 hover:bg-secondary/50"
+              )}
+            >
+              Two-way (Conversation)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {/* Tone */}
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <Label className="text-base font-medium">Tone</Label>
+          </div>
+          <div className="space-y-2">
+            {tones.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => setTone(t.value)}
+                className={cn(
+                  "w-full text-left p-3 rounded-lg border transition-all",
+                  tone === t.value
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-secondary/30 hover:bg-secondary/50"
+                )}
+              >
+                <span className="font-medium block">{t.label}</span>
+                <span className="text-xs text-muted-foreground">{t.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Voice Selection */}
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Mic className="w-5 h-5 text-primary" />
+            <Label className="text-base font-medium">Voice AI</Label>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-2 block">{podcastType === 'conversation' ? 'Primary Speaker Voice' : 'Voice Selection'}</Label>
+              <div className="space-y-2">
+                {voices.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setVoice(v.id)}
+                    className={cn(
+                      "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
+                      voice === v.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-secondary/30 hover:bg-secondary/50"
+                    )}
+                  >
+                    <div className="text-left w-full">
+                      <span className="font-medium block text-sm">{v.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {podcastType === 'conversation' && (
+              <div>
+                <Label className="text-xs text-muted-foreground mb-2 block">Secondary Speaker Voice</Label>
+                <div className="space-y-2">
+                  {voices.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setVoice2(v.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
+                        voice2 === v.id
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-secondary/30 hover:bg-secondary/50"
+                      )}
+                    >
+                      <div className="text-left w-full">
+                        <span className="font-medium block text-sm">{v.name}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {inputType === "record" && (
+            <p className="text-xs text-muted-foreground mt-4 italic text-center">
+              Voice AI is ignored if you're using your own recorded voice.
+            </p>
+          )}
         </div>
 
         {/* Duration */}
@@ -408,43 +751,18 @@ const Create = () => {
             ))}
           </div>
         </div>
-
-        {/* Tone */}
-        <div className="glass-card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <Label className="text-base font-medium">Tone</Label>
-          </div>
-          <div className="space-y-2">
-            {tones.map((t) => (
-              <button
-                key={t.value}
-                onClick={() => setTone(t.value)}
-                className={cn(
-                  "w-full text-left p-3 rounded-lg border transition-all",
-                  tone === t.value
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-secondary/30 hover:bg-secondary/50"
-                )}
-              >
-                <span className="font-medium block">{t.label}</span>
-                <span className="text-xs text-muted-foreground">{t.description}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       <div className="flex justify-between">
         <Button variant="ghost" onClick={() => setStep("input")}>
           Back
         </Button>
-        <Button variant="hero" size="lg" onClick={handleGenerate} className="gap-2">
-          <Sparkles className="w-4 h-4" />
-          Generate Podcast
+        <Button variant="hero" size="lg" onClick={inputType === "record" ? handleGenerateAudio : handleGenerate} className="gap-2">
+          {inputType === "record" ? <Mic className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+          {inputType === "record" ? "Finalize Podcast" : "Generate Podcast"}
         </Button>
       </div>
-    </div>
+    </div >
   );
 
   const renderGeneratingStep = () => (
@@ -471,6 +789,47 @@ const Create = () => {
 
       <div className="flex justify-center mt-8">
         <Waveform isPlaying barCount={15} className="h-12" />
+      </div>
+    </div>
+  );
+
+  const renderReviewStep = () => (
+    <div className="animate-fade-in">
+      <div className="text-center mb-8">
+        <h2 className="font-display text-2xl font-bold mb-2">
+          Review Your Script
+        </h2>
+        <p className="text-muted-foreground">
+          Check the generated content before converting to audio
+        </p>
+      </div>
+
+      <div className="glass-card p-6 mb-8 max-h-[500px] overflow-y-auto">
+        <h3 className="font-display text-xl font-bold mb-4">{generatedPodcast?.title}</h3>
+        <p className="text-muted-foreground mb-6 italic">{generatedPodcast?.description}</p>
+
+        <div className="space-y-4">
+          <Label className="text-base font-medium">Editable Script</Label>
+          <Textarea
+            value={editableScript}
+            onChange={(e) => setEditableScript(e.target.value)}
+            className="min-h-[300px] bg-secondary/50 border-border text-sm leading-relaxed"
+            placeholder="Edit your script here..."
+          />
+          <p className="text-xs text-muted-foreground">
+            You can make any final adjustments to the text before we convert it to high-quality audio.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex justify-between">
+        <Button variant="ghost" onClick={() => setStep("options")}>
+          Edit Options
+        </Button>
+        <Button variant="hero" size="lg" onClick={handleGenerateAudio} className="gap-2">
+          <Mic className="w-4 h-4" />
+          Create Podcast Audio
+        </Button>
       </div>
     </div>
   );
@@ -518,8 +877,8 @@ const Create = () => {
         {/* Audio Player */}
         <div className="bg-secondary/50 rounded-xl p-4">
           <div className="flex items-center gap-4 mb-3">
-            <Button 
-              variant="hero" 
+            <Button
+              variant="hero"
               size="icon-lg"
               onClick={audioPlayer.toggle}
               disabled={!generatedPodcast?.audioContent}
@@ -567,9 +926,9 @@ const Create = () => {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
-        <Button 
-          variant="hero" 
-          size="lg" 
+        <Button
+          variant="hero"
+          size="lg"
           className="flex-1 gap-2"
           onClick={handleDownload}
           disabled={!generatedPodcast?.audioContent}
@@ -577,14 +936,15 @@ const Create = () => {
           <Download className="w-4 h-4" />
           Download Audio
         </Button>
-        <Button 
-          variant="glass" 
-          size="lg" 
+        <Button
+          variant="glass"
+          size="lg"
           className="flex-1 gap-2"
           onClick={handleShareToFeed}
+          disabled={isSaving}
         >
           <Share2 className="w-4 h-4" />
-          Share to Feed
+          {isSaving ? "Sharing..." : "Share to Feed"}
         </Button>
       </div>
 
@@ -611,8 +971,8 @@ const Create = () => {
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 mb-12">
-          {["input", "options", "generating", "complete"].map((s, i) => {
-            const steps = ["input", "options", "generating", "complete"];
+          {["input", "options", "generating", "review", "complete"].map((s, i) => {
+            const steps = ["input", "options", "generating", "review", "complete"];
             const currentIndex = steps.indexOf(step);
             const stepIndex = i;
             const isActive = stepIndex <= currentIndex;
@@ -635,7 +995,7 @@ const Create = () => {
                     i + 1
                   )}
                 </div>
-                {i < 3 && (
+                {i < 4 && (
                   <div
                     className={cn(
                       "w-12 h-0.5 rounded",
@@ -652,6 +1012,7 @@ const Create = () => {
         {step === "input" && renderInputStep()}
         {step === "options" && renderOptionsStep()}
         {step === "generating" && renderGeneratingStep()}
+        {step === "review" && renderReviewStep()}
         {step === "complete" && renderCompleteStep()}
       </div>
     </Layout>

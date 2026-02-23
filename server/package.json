@@ -1,0 +1,23 @@
+{
+    "name": "audiora-backend",
+    "version": "1.0.0",
+    "description": "Backend for Audiora Podcast AI",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js"
+    },
+    "dependencies": {
+        "@google/generative-ai": "^0.24.1",
+        "@supabase/supabase-js": "^2.97.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "node-fetch": "^3.3.2",
+        "openai": "^6.22.0"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    }
+}

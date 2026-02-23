@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Search, Plus, User } from "lucide-react";
+import { Home, Search, Plus, User, Bell, MessageSquare, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MobileNav = () => {
@@ -7,8 +7,9 @@ const MobileNav = () => {
 
   const navItems = [
     { to: "/feed", label: "Home", icon: Home },
-    { to: "/discover", label: "Discover", icon: Search },
+    { to: "/explore", label: "Explore", icon: Compass },
     { to: "/create", label: "Create", icon: Plus, isCreate: true },
+    { to: "/messages", label: "DMs", icon: MessageSquare },
     { to: "/profile", label: "Profile", icon: User },
   ];
 
