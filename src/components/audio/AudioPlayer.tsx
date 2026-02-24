@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Play, Pause, SkipBack, SkipForward, Volume2, Heart, ListMusic
+  Play, Pause, SkipBack, SkipForward, Volume2, X, ListMusic
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -15,10 +15,9 @@ const formatTime = (seconds: number) => {
 };
 
 const AudioPlayer = () => {
-  const { currentTrack, isPlaying, volume, togglePlay, seek, setVolume, getAudio } = useAudio();
+  const { currentTrack, isPlaying, volume, togglePlay, seek, setVolume, stopTrack, getAudio } = useAudio();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
   const rafRef = useRef<number | null>(null);
 
   /* Subscribe to the shared audio element for time updates without polluting global state */
@@ -48,70 +47,80 @@ const AudioPlayer = () => {
 
   if (!currentTrack) return null;
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
   return (
     <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-player/95 backdrop-blur-xl border-t border-border/50">
-      {/* Clickable progress bar */}
-      <div
-        className="h-1 bg-waveform-inactive cursor-pointer"
-        onClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          seek(((e.clientX - rect.left) / rect.width) * duration);
-        }}
-      >
-        <div
-          className="h-full bg-gradient-to-r from-primary to-accent transition-none"
-          style={{ width: `${progress}%` }}
+      {/* Top Close Button for Mobile/Desktop */}
+      <div className="absolute top-2 right-2 z-50">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="h-6 w-6 rounded-full bg-player/50 hover:bg-player text-muted-foreground hover:text-foreground"
+          onClick={stopTrack}
+        >
+          <X className="w-3 h-3" />
+        </Button>
+      </div>
+
+      {/* Draggable Slider for Progress */}
+      <div className="px-4 -mt-2.5">
+        <Slider
+          value={[currentTime]}
+          max={duration || 100}
+          step={1}
+          onValueChange={(v) => seek(v[0])}
+          className="w-full cursor-pointer"
         />
       </div>
 
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center gap-4">
+      <div className="container mx-auto px-4 py-2 mt-1">
+        <div className="flex items-center justify-between gap-4">
           {/* Track Info */}
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 md:flex-1">
             <img
               src={currentTrack.coverUrl}
               alt={currentTrack.title}
-              className="w-12 h-12 rounded-lg object-cover"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover"
             />
             <div className="min-w-0">
-              <h4 className="font-medium text-sm truncate">{currentTrack.title}</h4>
-              <p className="text-xs text-muted-foreground truncate">{currentTrack.creator}</p>
+              <h4 className="font-medium text-xs md:text-sm truncate">{currentTrack.title}</h4>
+              <p className="text-[10px] md:text-xs text-muted-foreground truncate">{currentTrack.creator}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="hidden sm:flex shrink-0"
-              onClick={() => setIsLiked(!isLiked)}
-            >
-              <Heart className={cn("w-4 h-4", isLiked && "fill-accent text-accent")} />
-            </Button>
           </div>
 
-          {/* Playback Controls */}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" className="hidden sm:flex">
-              <SkipBack className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="player"
-              size="icon-lg"
-              onClick={togglePlay}
-              className="shadow-glow-sm"
-            >
-              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-            </Button>
-            <Button variant="ghost" size="icon-sm" className="hidden sm:flex">
-              <SkipForward className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* Time & Volume */}
-          <div className="hidden md:flex items-center gap-4 flex-1 justify-end">
-            <span className="text-xs text-muted-foreground w-24 text-right tabular-nums">
+          {/* Playback Controls and Time */}
+          <div className="flex flex-col items-center gap-1 md:flex-row md:gap-4 md:flex-1 md:justify-center">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => seek(Math.max(0, currentTime - 10))}
+              >
+                <SkipBack className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="player"
+                size="icon-lg"
+                onClick={togglePlay}
+                className="shadow-glow-sm"
+              >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => seek(Math.min(duration, currentTime + 10))}
+              >
+                <SkipForward className="w-4 h-4" />
+              </Button>
+            </div>
+            {/* Time display now visible on all screens */}
+            <span className="text-[10px] md:text-xs text-muted-foreground tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+          </div>
+
+          {/* Volume (Only on desktop) */}
+          <div className="hidden md:flex items-center gap-4 flex-1 justify-end">
             <div className="flex items-center gap-2 w-32">
               <Volume2 className="w-4 h-4 text-muted-foreground" />
               <Slider

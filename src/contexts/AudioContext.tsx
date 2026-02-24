@@ -17,6 +17,7 @@ interface AudioContextType {
     togglePlay: () => void;
     seek: (time: number) => void;
     setVolume: (vol: number) => void;
+    stopTrack: () => void;
     playingId: string | null;
     /** Direct access to the underlying <audio> element for time-sensitive consumers */
     getAudio: () => HTMLAudioElement | null;
@@ -76,6 +77,15 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
         setVolState(vol);
     };
 
+    const stopTrack = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+            setCurrentTrack(null);
+            setIsPlaying(false);
+        }
+    };
+
     return (
         <AudioCtx.Provider value={{
             currentTrack,
@@ -85,6 +95,7 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             togglePlay,
             seek,
             setVolume,
+            stopTrack,
             playingId: currentTrack?.id ?? null,
             getAudio: () => audioRef.current,
         }}>

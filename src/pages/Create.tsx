@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Mic,
   FileText,
@@ -28,6 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -37,6 +46,8 @@ import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { savePodcastToSupabase } from "@/lib/podcast-api";
+import { useCreation } from "@/contexts/CreationContext";
+import { ArrowLeft, Sparkles as SparklesIcon } from "lucide-react";
 
 type InputType = "topic" | "content" | "file" | "record";
 type GenerationStep = "input" | "options" | "generating" | "review" | "complete";
@@ -59,32 +70,62 @@ interface GeneratedPodcast {
 
 const Create = () => {
   const { user } = useAuth();
-  const [inputType, setInputType] = useState<InputType>("topic");
-  const [topic, setTopic] = useState("");
-  const [content, setContent] = useState("");
+  const navigate = useNavigate();
+  const {
+    inputType, setInputType,
+    topic, setTopic,
+    content, setContent,
+    outputLanguage, setOutputLanguage,
+    podcastType, setPodcastType,
+    duration, setDuration,
+    tone, setTone,
+    voice, setVoice,
+    voice2, setVoice2,
+    niche, setNiche,
+    step, setStep,
+    progress, setProgress,
+    progressText, setProgressText,
+    generatedPodcast, setGeneratedPodcast,
+    editableScript, setEditableScript,
+    coverPreview, setCoverPreview,
+    resetProgress, prevStep
+  } = useCreation();
+
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [outputLanguage, setOutputLanguage] = useState("en");
-  const [podcastType, setPodcastType] = useState<"solo" | "conversation">("solo");
-  const [duration, setDuration] = useState<"short" | "medium" | "long">("medium");
-  const [tone, setTone] = useState<"educational" | "conversational" | "storytelling" | "professional">("conversational");
-  const [voice, setVoice] = useState("en-US-AvaMultilingualNeural");
-  const [voice2, setVoice2] = useState("en-US-AndrewMultilingualNeural");
-  const [niche, setNiche] = useState("technology");
   const [isRecording, setIsRecording] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [shareCaption, setShareCaption] = useState("");
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const [step, setStep] = useState<GenerationStep>("input");
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState("");
-  const [generatedPodcast, setGeneratedPodcast] = useState<GeneratedPodcast | null>(null);
-  const [editableScript, setEditableScript] = useState("");
-
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const audioPlayer = useAudioPlayer();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+
+  // Auto-select best voices based on language
+  useEffect(() => {
+    if (outputLanguage === "te") {
+      setVoice("te-IN-ShrutiNeural");
+      setVoice2("te-IN-MohanNeural");
+    } else if (outputLanguage === "ta") {
+      setVoice("ta-IN-PallaviNeural");
+      setVoice2("ta-IN-ValluvarNeural");
+    } else if (outputLanguage === "hi") {
+      setVoice("hi-IN-SwaraNeural");
+      setVoice2("hi-IN-MadhurNeural");
+    } else if (outputLanguage === "en") {
+      setVoice("en-US-AvaMultilingualNeural");
+      setVoice2("en-US-AndrewMultilingualNeural");
+    }
+  }, [outputLanguage]);
 
   const languages = [
     { code: "en", name: "English" },
     { code: "te", name: "Telugu" },
+    { code: "ta", name: "Tamil" },
+    { code: "hi", name: "Hindi" },
     { code: "es", name: "Spanish" },
     { code: "fr", name: "French" },
     { code: "de", name: "German" },
@@ -94,9 +135,7 @@ const Create = () => {
     { code: "ko", name: "Korean" },
     { code: "zh", name: "Chinese" },
     { code: "ar", name: "Arabic" },
-    { code: "hi", name: "Hindi" },
-    { code: "ru", name: "Russian" },
-    { code: "te", name: "Telugu" }
+    { code: "ru", name: "Russian" }
   ];
 
   const durations = [
@@ -130,6 +169,10 @@ const Create = () => {
     { id: "en-US-BrianMultilingualNeural", name: "Brian (Male, Friendly)", gender: "Male" },
     { id: "te-IN-ShrutiNeural", name: "Shruti (Telugu, Female)", gender: "Female" },
     { id: "te-IN-MohanNeural", name: "Mohan (Telugu, Male)", gender: "Male" },
+    { id: "ta-IN-PallaviNeural", name: "Pallavi (Tamil, Female)", gender: "Female" },
+    { id: "ta-IN-ValluvarNeural", name: "Valluvar (Tamil, Male)", gender: "Male" },
+    { id: "hi-IN-SwaraNeural", name: "Swara (Hindi, Female)", gender: "Female" },
+    { id: "hi-IN-MadhurNeural", name: "Madhur (Hindi, Male)", gender: "Male" },
   ];
 
   const startRecording = async () => {
@@ -188,6 +231,23 @@ const Create = () => {
     setUploadedFile(null);
   };
 
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCoverImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeCover = () => {
+    setCoverImage(null);
+    setCoverPreview(null);
+  };
+
   const canProceed = () => {
     if (inputType === "topic") return topic.trim().length > 10;
     if (inputType === "content") return content.trim().length > 50;
@@ -198,23 +258,23 @@ const Create = () => {
 
   const handleNextFromInput = () => {
     if (inputType === "record") {
-      // Direct jump to review/complete for recording since there's no script generation
-      setGeneratedPodcast({
-        title: "My Recorded Podcast",
-        description: "A custom personal voice recording.",
-        language: outputLanguage,
-        estimatedDuration: 0,
-        chapters: [],
-        fullScript: "Self-recorded audio.",
-        tags: [niche]
-      });
+      // Direct jump to options for recording
+      if (!generatedPodcast) {
+        setGeneratedPodcast({
+          title: "My Recorded Podcast",
+          description: "A custom personal voice recording.",
+          language: outputLanguage,
+          estimatedDuration: 0,
+          chapters: [],
+          fullScript: "Self-recorded audio.",
+          tags: [niche]
+        });
+      }
       setStep("options");
     } else {
       setStep("options");
     }
   };
-
-  const [isSaving, setIsSaving] = useState(false);
 
   const saveToLibrary = async (isPublic = false) => {
     if (!generatedPodcast || !generatedPodcast.audioContent) return;
@@ -226,13 +286,15 @@ const Create = () => {
         audioContent: generatedPodcast.audioContent as string,
         audioMimeType: generatedPodcast.audioMimeType as string,
         niche,
-        type: inputType === "record" ? "recorded" : "generated"
+        type: inputType === "record" ? "recorded" : "generated",
+        coverFile: coverImage || undefined,
+        userCaption: isPublic ? shareCaption : undefined
       };
       await savePodcastToSupabase(podcastToSave, isPublic);
       toast.success(isPublic ? "Shared to Feed successfully!" : "Saved to your library!");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save podcast:', error);
-      toast.error("Failed to save podcast to cloud.");
+      toast.error(error.message || "Failed to save podcast to cloud.");
     } finally {
       setIsSaving(false);
     }
@@ -366,19 +428,29 @@ const Create = () => {
     }
   };
 
-  const handleShareToFeed = async () => {
+  const handleShareToFeed = () => {
+    setIsShareDialogOpen(true);
+  };
+
+  const confirmShareToFeed = async () => {
+    setIsShareDialogOpen(false);
     await saveToLibrary(true);
   };
 
   const renderInputStep = () => (
     <div className="animate-fade-in">
-      <div className="text-center mb-8">
-        <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3">
-          Create Your Podcast
-        </h1>
-        <p className="text-muted-foreground">
-          Start with a topic, paste content, or upload a document
-        </p>
+      <div className="flex items-center gap-4 mb-8">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/feed')} className="shrink-0 h-10 w-10">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="text-left">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-1">
+            Create Your Podcast
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Start with a topic, paste content, or upload a document
+          </p>
+        </div>
       </div>
 
       <Tabs value={inputType} onValueChange={(v) => setInputType(v as InputType)} className="w-full">
@@ -558,13 +630,18 @@ const Create = () => {
 
   const renderOptionsStep = () => (
     <div className="animate-fade-in">
-      <div className="text-center mb-8">
-        <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">
-          Customize Your Podcast
-        </h2>
-        <p className="text-muted-foreground">
-          Select language, duration, and tone
-        </p>
+      <div className="flex items-center gap-4 mb-8">
+        <Button variant="ghost" size="icon" onClick={prevStep} className="shrink-0 h-10 w-10">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="text-left">
+          <h2 className="font-display text-2xl sm:text-3xl font-bold mb-1">
+            Customize Your Podcast
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Select language, duration, and tone
+          </p>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6 mb-8">
@@ -753,10 +830,7 @@ const Create = () => {
         </div>
       </div>
 
-      <div className="flex justify-between">
-        <Button variant="ghost" onClick={() => setStep("input")}>
-          Back
-        </Button>
+      <div className="flex justify-center mt-8">
         <Button variant="hero" size="lg" onClick={inputType === "record" ? handleGenerateAudio : handleGenerate} className="gap-2">
           {inputType === "record" ? <Mic className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
           {inputType === "record" ? "Finalize Podcast" : "Generate Podcast"}
@@ -766,16 +840,24 @@ const Create = () => {
   );
 
   const renderGeneratingStep = () => (
-    <div className="animate-fade-in text-center py-12">
-      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+    <div className="animate-fade-in py-12">
+      <div className="flex justify-start mb-8 -mt-8">
+        <Button variant="ghost" size="sm" onClick={prevStep} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Cancel & Go Back
+        </Button>
       </div>
-      <h2 className="font-display text-2xl font-bold mb-3">
-        Creating Your Podcast
-      </h2>
-      <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-        {progressText}
-      </p>
+      <div className="text-center">
+        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        </div>
+        <h2 className="font-display text-2xl font-bold mb-3">
+          Creating Your Podcast
+        </h2>
+        <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+          {progressText}
+        </p>
+      </div>
 
       <div className="max-w-md mx-auto mb-4">
         <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -795,13 +877,18 @@ const Create = () => {
 
   const renderReviewStep = () => (
     <div className="animate-fade-in">
-      <div className="text-center mb-8">
-        <h2 className="font-display text-2xl font-bold mb-2">
-          Review Your Script
-        </h2>
-        <p className="text-muted-foreground">
-          Check the generated content before converting to audio
-        </p>
+      <div className="flex items-center gap-4 mb-8">
+        <Button variant="ghost" size="icon" onClick={prevStep} className="shrink-0 h-10 w-10">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="text-left">
+          <h2 className="font-display text-2xl font-bold mb-1">
+            Review Your Script
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Check the generated content before converting to audio
+          </p>
+        </div>
       </div>
 
       <div className="glass-card p-6 mb-8 max-h-[500px] overflow-y-auto">
@@ -822,10 +909,7 @@ const Create = () => {
         </div>
       </div>
 
-      <div className="flex justify-between">
-        <Button variant="ghost" onClick={() => setStep("options")}>
-          Edit Options
-        </Button>
+      <div className="flex justify-center">
         <Button variant="hero" size="lg" onClick={handleGenerateAudio} className="gap-2">
           <Mic className="w-4 h-4" />
           Create Podcast Audio
@@ -836,22 +920,79 @@ const Create = () => {
 
   const renderCompleteStep = () => (
     <div className="animate-fade-in">
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
-          <Check className="w-8 h-8 text-green-500" />
+      <div className="flex items-center gap-4 mb-8">
+        <Button variant="ghost" size="icon" onClick={prevStep} className="shrink-0 h-10 w-10">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="text-left">
+          <h2 className="font-display text-2xl font-bold mb-1">
+            Podcast Ready!
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Your podcast has been generated successfully
+          </p>
         </div>
-        <h2 className="font-display text-2xl font-bold mb-2">
-          Podcast Ready!
-        </h2>
-        <p className="text-muted-foreground">
-          Your podcast has been generated successfully
-        </p>
       </div>
 
       <div className="glass-card p-6 mb-8">
+        <div className="flex flex-col md:flex-row items-center gap-6 mb-8 pb-8 border-b border-border">
+          <div className="relative group">
+            <div className={cn(
+              "w-32 h-32 rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center overflow-hidden shrink-0 border border-border shadow-inner transition-all hover:bg-secondary/80 cursor-pointer",
+              coverPreview ? "" : "bg-secondary"
+            )}
+              onClick={() => coverInputRef.current?.click()}
+            >
+              {coverPreview ? (
+                <img src={coverPreview} alt="Cover Preview" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-muted-foreground/50" />
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Add Cover</span>
+                </div>
+              )}
+            </div>
+            <input
+              type="file"
+              ref={coverInputRef}
+              onChange={handleCoverUpload}
+              accept="image/*"
+              className="hidden"
+            />
+            {coverPreview && (
+              <Button
+                variant="destructive"
+                size="icon-sm"
+                className="absolute -top-2 -right-2 rounded-full shadow-lg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeCover();
+                }}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+          <div className="text-center md:text-left flex-1">
+            <h3 className="font-display text-xl font-bold mb-2">Podcast Cover Image</h3>
+            <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+              Add a compelling image to your podcast. This will be shown on the community feed to attract listeners.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => coverInputRef.current?.click()}
+            >
+              <FileUp className="w-4 h-4" />
+              {coverImage ? "Change Image" : "Choose Image"}
+            </Button>
+          </div>
+        </div>
+
         <div className="flex items-start gap-4 mb-6">
-          <div className="w-24 h-24 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
-            <Mic className="w-10 h-10 text-primary" />
+          <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center shrink-0">
+            <Mic className="w-8 h-8 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
             <Badge className="mb-2">AI Generated</Badge>
@@ -948,21 +1089,121 @@ const Create = () => {
         </Button>
       </div>
 
-      <div className="text-center mt-8">
+      <div className="flex justify-center mt-8">
         <Button
-          variant="ghost"
+          variant="secondary"
+          className="text-xs"
           onClick={() => {
-            setStep("input");
-            setTopic("");
-            setContent("");
-            setUploadedFile(null);
-            setProgress(0);
-            setGeneratedPodcast(null);
+            resetProgress();
           }}
         >
           Create Another Podcast
         </Button>
       </div>
+
+      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share to Community Feed</DialogTitle>
+            <DialogDescription>
+              Great podcast! Would you like to add a cover image before sharing it with the community?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center gap-6 py-4">
+            <div className="relative group">
+              <div className={cn(
+                "w-48 h-48 rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center overflow-hidden border border-border shadow-inner transition-all",
+                coverPreview ? "" : "bg-secondary hover:bg-secondary/80 cursor-pointer"
+              )}
+                onClick={() => !coverPreview && coverInputRef.current?.click()}
+              >
+                {coverPreview ? (
+                  <img src={coverPreview} alt="Cover Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-10 h-10 text-muted-foreground/50" />
+                    <span className="text-xs text-muted-foreground font-medium">Add Cover Image</span>
+                  </div>
+                )}
+              </div>
+              <input
+                type="file"
+                ref={coverInputRef}
+                onChange={handleCoverUpload}
+                accept="image/*"
+                className="hidden"
+              />
+              {coverPreview && (
+                <Button
+                  variant="destructive"
+                  size="icon-sm"
+                  className="absolute -top-2 -right-2 rounded-full shadow-lg"
+                  onClick={removeCover}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+            {!coverPreview && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => coverInputRef.current?.click()}
+              >
+                <Upload className="w-4 h-4" />
+                Choose Image
+              </Button>
+            )}
+            {coverPreview && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => coverInputRef.current?.click()}
+              >
+                Change Image
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-2 mt-2">
+            <Label htmlFor="share-caption" className="text-sm font-medium">Add a caption (Optional)</Label>
+            <Textarea
+              id="share-caption"
+              placeholder="What is this podcast about?"
+              className="resize-none"
+              rows={3}
+              value={shareCaption}
+              onChange={(e) => setShareCaption(e.target.value)}
+              maxLength={500}
+            />
+            <div className="flex justify-between items-center px-1">
+              <span className="text-[10px] text-muted-foreground">This will be visible on your post</span>
+              <span className="text-[10px] text-muted-foreground">{shareCaption.length}/500</span>
+            </div>
+          </div>
+
+          <DialogFooter className="flex sm:justify-between gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setIsShareDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="hero"
+              onClick={confirmShareToFeed}
+              disabled={isSaving}
+              className="gap-2"
+            >
+              <Share2 className="w-4 h-4" />
+              {coverPreview ? "Post with Image" : "Post without Image"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 

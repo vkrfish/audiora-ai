@@ -5,15 +5,22 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Home, Users, TrendingUp, Play, Heart, MessageCircle,
-  Share2, MoreHorizontal, Bookmark, Trash2, Link, Pause, Download, Send, X
+  Share2, MoreHorizontal, Bookmark, Trash2, Link, Pause, Download, Send, X,
+  Edit, Image as ImageIcon, Sparkles, Loader2, Check
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import Layout from "@/components/layout/Layout";
 import { cn } from "@/lib/utils";
-import { getPublicPodcasts } from "@/lib/podcast-api";
+import { getPublicPodcasts, updatePodcast } from "@/lib/podcast-api";
 import { useAudio } from "@/contexts/AudioContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -34,6 +41,7 @@ interface AudioPost {
   type: "short" | "podcast";
   title: string;
   description?: string;
+  caption?: string;
   creator: { name: string; username: string; avatar: string; userId: string; };
   coverUrl: string;
   durationStr: string;
@@ -46,7 +54,7 @@ const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString
 const formatNumber = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : n.toString();
 
 /* ── Comment panel component ── */
-const CommentPanel = ({ postId, onClose }: { postId: string; onClose: () => void }) => {
+const CommentPanel = ({ postId, onClose, onUpdateCount }: { postId: string; onClose: () => void; onUpdateCount: (delta: number) => void }) => {
   const { user } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [text, setText] = useState('');
@@ -83,6 +91,7 @@ const CommentPanel = ({ postId, onClose }: { postId: string; onClose: () => void
     if (!error && data) {
       setComments(prev => [...prev, { ...data, username: 'user_' + user.id.substring(0, 5) }]);
       setText('');
+      onUpdateCount(1);
     }
     setPosting(false);
   };
@@ -90,6 +99,7 @@ const CommentPanel = ({ postId, onClose }: { postId: string; onClose: () => void
   const handleDelete = async (commentId: string) => {
     await supabase.from('podcast_comments').delete().eq('id', commentId);
     setComments(prev => prev.filter(c => c.id !== commentId));
+    onUpdateCount(-1);
   };
 
   return (
@@ -172,6 +182,15 @@ const Feed = () => {
   const { user } = useAuth();
   const audio = useAudio();
 
+  // Edit states
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<AudioPost | null>(null);
+  const [editCaption, setEditCaption] = useState("");
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editCoverPreview, setEditCoverPreview] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const editCoverInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const fetchPosts = async () => {
       try {
@@ -181,13 +200,14 @@ const Feed = () => {
           type: item.type === "recorded" ? "short" : "podcast",
           title: item.title || "Untitled Podcast",
           description: item.description,
+          caption: item.user_caption,
           creator: {
             name: item.profiles?.full_name || "Community AI",
-            username: "user_" + item.user_id.substring(0, 5),
-            avatar: "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop",
+            username: item.profiles?.username || ("user_" + item.user_id.substring(0, 5)),
+            avatar: item.profiles?.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop",
             userId: item.user_id,
           },
-          coverUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop",
+          coverUrl: item.cover_url || `https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8cG9kY2FzdHxlbnwwfHwwfHx8MA%3D%3D`,
           durationStr: formatDuration(item.estimated_duration || 0),
           likes: item.likes_count || 0,
           comments: item.comments_count || 0,
@@ -229,13 +249,14 @@ const Feed = () => {
         const followingIds = follows.map((f: any) => f.following_id);
         const { data: fpods } = await supabase
           .from('podcasts')
-          .select('id, title, description, type, estimated_duration, likes_count, comments_count, created_at, user_id, audio_files(file_url), profiles(full_name)')
+          .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, audio_files(file_url), profiles(full_name)')
           .in('user_id', followingIds)
           .order('created_at', { ascending: false });
 
         const fmtd = (fpods || []).map((item: any) => ({
           id: item.id, type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
           title: item.title || 'Untitled', description: item.description,
+          caption: item.user_caption,
           creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
           coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
           durationStr: formatDuration(item.estimated_duration || 0),
@@ -249,12 +270,13 @@ const Feed = () => {
     if (activeTab === "trending") {
       setTrendingLoading(true);
       supabase.from('trending_podcasts')
-        .select('id, title, description, type, estimated_duration, likes_count, comments_count, created_at, user_id, score, audio_files(file_url), profiles(full_name)')
+        .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, score, audio_files(file_url), profiles(full_name)')
         .limit(20)
         .then(({ data: tpods }) => {
           const fmtT = (tpods || []).map((item: any) => ({
             id: item.id, type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
             title: item.title || 'Untitled', description: item.description,
+            caption: item.user_caption,
             creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
             coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
             durationStr: formatDuration(item.estimated_duration || 0),
@@ -313,6 +335,53 @@ const Feed = () => {
     setOpenComments(prev => prev === postId ? null : postId);
   };
 
+  const handleEditClick = (post: AudioPost) => {
+    setEditingPost(post);
+    setEditCaption(post.caption || "");
+    setEditCoverPreview(post.coverUrl);
+    setEditCoverFile(null);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setEditCoverFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => setEditCoverPreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpdatePodcast = async () => {
+    if (!editingPost) return;
+    setIsUpdating(true);
+    try {
+      const updatedData = await updatePodcast(editingPost.id, {
+        userCaption: editCaption,
+        coverFile: editCoverFile || undefined
+      });
+
+      // Update local state
+      const updateList = (list: AudioPost[]) => list.map(p =>
+        p.id === editingPost.id
+          ? { ...p, caption: editCaption, coverUrl: updatedData.cover_url || p.coverUrl }
+          : p
+      );
+
+      setPosts(updateList);
+      setFollowingPosts(updateList);
+      setTrendingPosts(updateList);
+
+      toast.success("Podcast updated successfully!");
+      setIsEditDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update podcast");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   /* ── Card ── */
   const AudioPostCard = ({ post }: { post: AudioPost }) => {
     const isPlaying = audio.playingId === post.id && audio.isPlaying;
@@ -363,6 +432,9 @@ const Feed = () => {
               {isCurrentUser && (
                 <>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleEditClick(post)} className="gap-2">
+                    <Edit className="w-4 h-4" />Edit Podcast
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleDelete(post.id)} className="gap-2 text-destructive focus:text-destructive">
                     <Trash2 className="w-4 h-4" />Delete
                   </DropdownMenuItem>
@@ -371,6 +443,13 @@ const Feed = () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* Caption */}
+        {post.caption && (
+          <p className="text-sm mb-4 leading-relaxed whitespace-pre-wrap">
+            {post.caption}
+          </p>
+        )}
 
         {/* Content */}
         <div className="flex gap-4 mb-4">
@@ -422,6 +501,12 @@ const Feed = () => {
           <CommentPanel
             postId={post.id}
             onClose={() => setOpenComments(null)}
+            onUpdateCount={(delta) => {
+              setCommentCounts(prev => ({
+                ...prev,
+                [post.id]: Math.max(0, (prev[post.id] || 0) + delta)
+              }));
+            }}
           />
         )}
       </div>
@@ -483,6 +568,69 @@ const Feed = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Podcast</DialogTitle>
+            <DialogDescription>
+              Update your podcast's cover image and caption.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center gap-6 py-4">
+            <div className="relative group">
+              <div
+                className="w-48 h-48 rounded-2xl bg-secondary flex items-center justify-center overflow-hidden border border-border shadow-inner cursor-pointer"
+                onClick={() => editCoverInputRef.current?.click()}
+              >
+                {editCoverPreview ? (
+                  <img src={editCoverPreview} alt="Cover Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <ImageIcon className="w-10 h-10 text-muted-foreground/50" />
+                    <span className="text-xs text-muted-foreground font-medium">Change Cover</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Edit className="w-8 h-8 text-white" />
+                </div>
+              </div>
+              <input
+                type="file"
+                ref={editCoverInputRef}
+                onChange={handleEditCoverUpload}
+                accept="image/*"
+                className="hidden"
+              />
+            </div>
+
+            <div className="w-full space-y-2">
+              <Label htmlFor="edit-caption" className="text-sm font-medium">Caption</Label>
+              <Textarea
+                id="edit-caption"
+                placeholder="What's on your mind?"
+                className="resize-none"
+                rows={4}
+                value={editCaption}
+                onChange={(e) => setEditCaption(e.target.value)}
+                maxLength={500}
+              />
+              <p className="text-[10px] text-right text-muted-foreground">{editCaption.length}/500</p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsEditDialogOpen(false)} disabled={isUpdating}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePodcast} disabled={isUpdating} className="gap-2">
+              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

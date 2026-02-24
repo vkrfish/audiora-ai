@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { AudioProvider } from "@/contexts/AudioContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
+import { CreationProvider } from "@/contexts/CreationContext";
 import Index from "./pages/Index";
 import Create from "./pages/Create";
 import Feed from "./pages/Feed";
@@ -73,15 +74,17 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <SettingsProvider>
-        <AudioProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
-          </TooltipProvider>
-        </AudioProvider>
+        <CreationProvider>
+          <AudioProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </TooltipProvider>
+          </AudioProvider>
+        </CreationProvider>
       </SettingsProvider>
     </AuthProvider>
   </QueryClientProvider>

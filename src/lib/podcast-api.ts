@@ -57,7 +57,7 @@ export const generatePodcast = async (params: GeneratePodcastParams): Promise<Po
 
   // Language names
   const languageNames: Record<string, string> = {
-    en: 'English', te: 'Telugu', es: 'Spanish', fr: 'French', de: 'German',
+    en: 'English', te: 'Telugu', ta: 'Tamil', es: 'Spanish', fr: 'French', de: 'German',
     pt: 'Portuguese', it: 'Italian', ja: 'Japanese', ko: 'Korean',
     zh: 'Chinese', ar: 'Arabic', hi: 'Hindi', ru: 'Russian'
   };
@@ -182,12 +182,44 @@ export const readFileContent = (file: File): Promise<string> => {
   });
 };
 
+export const uploadImage = async (file: File, userId: string): Promise<string> => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${userId}/covers/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+  const { data, error } = await supabase.storage
+    .from('podcast-covers')
+    .upload(fileName, file, { contentType: file.type });
+
+  if (error) throw new Error(`Failed to upload image: ${error.message}`);
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('podcast-covers')
+    .getPublicUrl(fileName);
+
+  return publicUrl;
+};
+
 export const savePodcastToSupabase = async (
-  podcast: PodcastScript & { audioContent: string; audioMimeType: string; type?: string; niche?: string },
+  podcast: PodcastScript & {
+    audioContent: string;
+    audioMimeType: string;
+    type?: string;
+    niche?: string;
+    coverUrl?: string;
+    coverFile?: File;
+    userCaption?: string;
+  },
   isPublic: boolean = false
 ) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Must be logged in to save podcast");
+
+  let finalCoverUrl = podcast.coverUrl;
+
+  // If a file is provided, upload it first
+  if (podcast.coverFile) {
+    finalCoverUrl = await uploadImage(podcast.coverFile, user.id);
+  }
 
   // 1. Upload audio to Storage
   // Convert base64 to Blob
@@ -230,7 +262,9 @@ export const savePodcastToSupabase = async (
       type: podcast.type || 'generated',
       niche: podcast.niche || podcast.tags?.[0] || 'general',
       is_public: isPublic,
-      script_content: podcast.fullScript
+      script_content: podcast.fullScript,
+      cover_url: finalCoverUrl,
+      user_caption: podcast.userCaption
     })
     .select()
     .single();
@@ -258,10 +292,47 @@ export const savePodcastToSupabase = async (
 export const getPublicPodcasts = async () => {
   const { data, error } = await supabase
     .from('podcasts')
-    .select('*, audio_files(*)')
+    .select('*, audio_files(*), profiles(*)')
     .eq('is_public', true)
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(`Failed to fetch public podcasts: ${error.message}`);
+  return data;
+};
+
+export const updatePodcast = async (
+  podcastId: string,
+  updates: {
+    userCaption?: string;
+    coverUrl?: string;
+    coverFile?: File;
+  }
+) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Must be logged in to update podcast");
+
+  let finalUpdates: any = {};
+
+  if (updates.userCaption !== undefined) {
+    finalUpdates.user_caption = updates.userCaption;
+  }
+
+  if (updates.coverFile) {
+    finalUpdates.cover_url = await uploadImage(updates.coverFile, user.id);
+  } else if (updates.coverUrl !== undefined) {
+    finalUpdates.cover_url = updates.coverUrl;
+  }
+
+  if (Object.keys(finalUpdates).length === 0) return { success: true };
+
+  const { data, error } = await supabase
+    .from('podcasts')
+    .update(finalUpdates)
+    .eq('id', podcastId)
+    .eq('user_id', user.id) // Security check
+    .select()
+    .single();
+
+  if (error) throw new Error(`Failed to update podcast: ${error.message}`);
   return data;
 };
