@@ -73,13 +73,13 @@ const Profile = () => {
     const fetchAll = async () => {
       const [{ data: prof }, { data: pods }, { data: liked }, { data: saved }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('podcasts').select('id, title, description, estimated_duration, likes_count, created_at, audio_files(file_url)')
+        supabase.from('podcasts').select('id, title, description, estimated_duration, likes_count, created_at, cover_url, audio_files(file_url)')
           .eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('podcast_likes').select(`
-          podcast_id, podcasts(id, title, estimated_duration, likes_count, created_at, audio_files(file_url))
+          podcast_id, podcasts(id, title, estimated_duration, likes_count, created_at, cover_url, audio_files(file_url))
         `).eq('user_id', user.id),
         supabase.from('saved_podcasts').select(`
-          podcast_id, podcasts(id, title, estimated_duration, likes_count, created_at, audio_files(file_url))
+          podcast_id, podcasts(id, title, estimated_duration, likes_count, created_at, cover_url, audio_files(file_url))
         `).eq('user_id', user.id).order('created_at', { ascending: false })
       ]);
       setProfile(prof);
@@ -89,7 +89,7 @@ const Profile = () => {
         likes: p.likes_count || 0,
         duration: `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`,
         createdAt: formatDistanceToNow(new Date(p.created_at), { addSuffix: true }),
-        coverUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop"
+        coverUrl: p.cover_url || "https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop"
       });
       setMyPodcasts((pods || []).map(fmtPod));
       setLikedPodcasts((liked || []).filter((l: any) => l.podcasts).map((l: any) => fmtPod(l.podcasts)));

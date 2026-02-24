@@ -81,8 +81,17 @@ const Messages = () => {
 
             // Auto-open conv from query param
             const convId = searchParams.get('conv');
-            if (convId && formatted.find(c => c.id === convId)) setActiveConv(convId);
-            else if (formatted.length > 0 && !activeConv) setActiveConv(formatted[0].id);
+            if (convId && formatted.find(c => c.id === convId)) {
+                setActiveConv(convId);
+            } else if (formatted.length > 0) {
+                // On mobile, don't auto-select a conversation so the sidebar is visible.
+                // On desktop, auto-select the first conversation.
+                setActiveConv(prev => {
+                    if (prev) return prev;
+                    if (window.innerWidth < 768) return null;
+                    return formatted[0].id;
+                });
+            }
         };
         fetchConvs();
 
@@ -98,7 +107,7 @@ const Messages = () => {
             .subscribe();
 
         return () => { supabase.removeChannel(convChannel); };
-    }, [user, activeConv]);
+    }, [user, searchParams]);
 
     // Load messages for active conversation
     useEffect(() => {

@@ -292,7 +292,15 @@ const Feed = () => {
     if (!user) { toast.error("Sign in to like"); return; }
     const isLiked = likedIds.has(postId);
     setLikedIds(prev => { const n = new Set(prev); isLiked ? n.delete(postId) : n.add(postId); return n; });
-    setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: p.likes + (isLiked ? -1 : 1) } : p));
+
+    // Update all lists
+    const updateLikes = (list: AudioPost[]) =>
+      list.map(p => p.id === postId ? { ...p, likes: Math.max(0, p.likes + (isLiked ? -1 : 1)) } : p);
+
+    setPosts(prev => updateLikes(prev));
+    setFollowingPosts(prev => updateLikes(prev));
+    setTrendingPosts(prev => updateLikes(prev));
+
     if (isLiked) {
       await supabase.from('podcast_likes').delete().eq('user_id', user.id).eq('podcast_id', postId);
     } else {
