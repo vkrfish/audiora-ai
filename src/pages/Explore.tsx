@@ -72,6 +72,7 @@ interface ExplorePodcast {
     coverIdx: number;
     gradientIdx: number;
     niche?: string;
+    coverUrl?: string;
 }
 
 const ExploreTile = ({
@@ -87,7 +88,7 @@ const ExploreTile = ({
     const [liked, setLiked] = useState(false);
     const isPlaying = audio.playingId === pod.id && audio.isPlaying;
     const isLoaded = audio.playingId === pod.id;
-    const coverUrl = COVERS[pod.coverIdx % COVERS.length];
+    const coverUrl = pod.coverUrl || COVERS[pod.coverIdx % COVERS.length];
     const gradient = GRADIENTS[pod.gradientIdx % GRADIENTS.length];
 
     const handlePlay = (e: React.MouseEvent) => {
@@ -194,7 +195,7 @@ const Explore = () => {
                 .from('podcasts')
                 .select(`
                     id, title, description, niche, estimated_duration, 
-                    likes_count, comments_count, user_id,
+                    likes_count, comments_count, user_id, cover_url,
                     audio_files!inner(file_url),
                     profiles!inner(full_name, username)
                 `)
@@ -220,7 +221,8 @@ const Explore = () => {
                 duration: `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`,
                 coverIdx: i,
                 gradientIdx: i,
-                niche: p.niche || 'general'
+                niche: p.niche || 'general',
+                coverUrl: p.cover_url
             }));
             setPodcasts(formatted);
             setFiltered(formatted);
