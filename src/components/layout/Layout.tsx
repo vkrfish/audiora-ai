@@ -14,18 +14,18 @@ const Layout = ({ children, showPlayer = false, hideNav = false }: LayoutProps) 
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Background gradient mesh */}
       <div className="fixed inset-0 bg-mesh-gradient pointer-events-none" />
-      
+
       {/* Navbar */}
       {!hideNav && <Navbar />}
-      
+
       {/* Main Content */}
       <main className={`relative z-10 ${!hideNav ? 'pt-16' : ''} ${showPlayer ? 'pb-32 md:pb-24' : 'pb-20 md:pb-0'}`}>
         {children}
       </main>
-      
+
       {/* Mobile Navigation */}
       {!hideNav && <MobileNav />}
-      
+
       {/* Audio Player */}
       {showPlayer && <AudioPlayer />}
     </div>

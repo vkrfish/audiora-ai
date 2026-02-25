@@ -88,6 +88,8 @@ const Create = () => {
     generatedPodcast, setGeneratedPodcast,
     editableScript, setEditableScript,
     coverPreview, setCoverPreview,
+    extractedText, setExtractedText,
+    uploadedFileName, setUploadedFileName,
     resetProgress, prevStep
   } = useCreation();
 
@@ -120,6 +122,10 @@ const Create = () => {
       setVoice2("en-US-AndrewMultilingualNeural");
     }
   }, [outputLanguage]);
+
+  useEffect(() => {
+    console.log(`[Create] inputType changed to: ${inputType}`);
+  }, [inputType]);
 
   const languages = [
     { code: "en", name: "English" },
@@ -220,15 +226,28 @@ const Create = () => {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setUploadedFile(file);
+      setUploadedFileName(file.name);
+      toast.info(`Extracting text from ${file.name}...`);
+      try {
+        const text = await readFileContent(file);
+        setExtractedText(text);
+        console.log(`[Create] Extracted and persisted ${text.length} characters.`);
+        toast.success("Text extracted successfully!");
+      } catch (err: any) {
+        console.error("Text extraction failed", err);
+        toast.error("Failed to extract text from file.");
+      }
     }
   };
 
   const removeFile = () => {
     setUploadedFile(null);
+    setUploadedFileName("");
+    setExtractedText("");
   };
 
   const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -251,13 +270,16 @@ const Create = () => {
   const canProceed = () => {
     if (inputType === "topic") return topic.trim().length > 10;
     if (inputType === "content") return content.trim().length > 50;
-    if (inputType === "file") return uploadedFile !== null;
+    if (inputType === "file") return extractedText.length > 5 || uploadedFile !== null;
     if (inputType === "record") return recordedAudio !== null;
     return false;
   };
 
   const handleNextFromInput = () => {
-    if (inputType === "record") {
+    if (inputType === "file") {
+      // For files, skip options and go straight to generation/review since the script is ready
+      handleGenerate();
+    } else if (inputType === "record") {
       // Direct jump to options for recording
       if (!generatedPodcast) {
         setGeneratedPodcast({
@@ -306,38 +328,65 @@ const Create = () => {
     setProgressText("Preparing content...");
 
     try {
-      // Step 1: Prepare content
+      // Step 1: Diagnostics
+      console.log(`[Create] Step 1: inputType=${inputType}, hasExtractedText=${!!extractedText} (${extractedText.length} chars), uploadedFileName=${uploadedFileName}`);
       setProgress(10);
       setProgressText("Analyzing your content...");
 
-      let fileContent = "";
-      if (inputType === "file" && uploadedFile) {
-        fileContent = await readFileContent(uploadedFile);
-      }
-
-      // Step 2: Generate podcast script
+      // Step 2: Generate podcast script or bypass for files/content
       setProgress(30);
-      setProgressText("AI is writing your podcast script...");
 
-      // Pre-generation: Get voice names for character personas
-      const selectedVoice = voices.find(v => v.id === voice);
-      const selectedVoice2 = voices.find(v => v.id === voice2);
+      if (inputType === "file" || inputType === "content") {
+        const sourceText = inputType === "file" ? extractedText : content;
 
-      const podcastScript = await generatePodcast({
-        inputType,
-        topic,
-        content,
-        fileContent,
-        outputLanguage,
-        duration,
-        tone,
-        podcastType,
-        voiceName: selectedVoice?.name.split(' ')[0] || 'Host',
-        voice2Name: selectedVoice2?.name.split(' ')[0] || 'Guest'
-      });
+        console.log(`[Create] Bypassing AI generation. sourceText length: ${sourceText?.length || 0}`);
 
-      setGeneratedPodcast(podcastScript);
-      setEditableScript(podcastScript.fullScript);
+        if (!sourceText || sourceText.trim().length < 5) {
+          console.error("[Create] Critical Error: Bypass triggered but sourceText is empty.");
+          throw new Error("No content found. Please upload your file again or paste your text.");
+        }
+
+        setProgressText("Preparing your script...");
+
+        const podcastScript = {
+          title: inputType === "file" ? (uploadedFileName.split('.')[0] || "My Document") : (topic || "My Content"),
+          description: inputType === "file" ? `Extracted content from ${uploadedFileName}` : "Pasted content",
+          language: outputLanguage,
+          estimatedDuration: Math.ceil(sourceText.length / 150) * 10,
+          chapters: [{ title: "Main Content", content: sourceText, durationSeconds: Math.ceil(sourceText.length / 150) * 10 }],
+          fullScript: sourceText,
+          tags: [niche]
+        };
+        setGeneratedPodcast(podcastScript);
+        setEditableScript(podcastScript.fullScript);
+
+        console.log("[Create] Bypass complete. Set scripts in state.");
+      } else {
+        console.log(`[Create] Proceeding with AI generation for type: ${inputType}`);
+        setProgressText("AI is writing your podcast script...");
+
+        // Pre-generation: Get voice names for character personas
+        const selectedVoice = voices.find(v => v.id === voice);
+        const selectedVoice2 = voices.find(v => v.id === voice2);
+
+        console.log(`[Create] Using voices: ${selectedVoice?.name} and ${selectedVoice2?.name}`);
+
+        const podcastScript = await generatePodcast({
+          inputType,
+          topic,
+          content,
+          fileContent: extractedText,
+          outputLanguage,
+          duration,
+          tone,
+          podcastType,
+          voiceName: selectedVoice?.name.split(' ')[0] || 'Host',
+          voice2Name: selectedVoice2?.name.split(' ')[0] || 'Guest'
+        });
+
+        setGeneratedPodcast(podcastScript);
+        setEditableScript(podcastScript.fullScript);
+      }
 
       setProgress(100);
       setProgressText("Script ready for review!");
@@ -511,7 +560,7 @@ const Create = () => {
 
         <TabsContent value="file" className="space-y-4">
           <div className="glass-card p-6">
-            {!uploadedFile ? (
+            {!uploadedFileName && !uploadedFile ? (
               <label className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-12 cursor-pointer hover:border-primary/50 transition-colors">
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <FileUp className="w-8 h-8 text-primary" />
@@ -534,9 +583,9 @@ const Create = () => {
                     <FileText className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium">{uploadedFile.name}</p>
+                    <p className="font-medium">{uploadedFileName || uploadedFile.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                      {uploadedFile ? (uploadedFile.size / 1024 / 1024).toFixed(2) : "0.00"} MB
                     </p>
                   </div>
                 </div>
@@ -907,6 +956,48 @@ const Create = () => {
             You can make any final adjustments to the text before we convert it to high-quality audio.
           </p>
         </div>
+
+        {inputType === "file" && (
+          <div className="mt-8 pt-8 border-t border-border space-y-6">
+            <h4 className="font-display text-lg font-bold">Audio Settings</h4>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <Label className="text-sm font-medium mb-3 block">Voice AI</Label>
+                <div className="space-y-2">
+                  {voices.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setVoice(v.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
+                        voice === v.id
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-secondary/30 hover:bg-secondary/50"
+                      )}
+                    >
+                      <span className="font-medium text-sm">{v.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium mb-3 block">Language</Label>
+                <Select value={outputLanguage} onValueChange={setOutputLanguage}>
+                  <SelectTrigger className="bg-secondary/50 w-full">
+                    <SelectValue placeholder="Select language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {languages.map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-center">
@@ -1212,41 +1303,46 @@ const Create = () => {
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 mb-12">
-          {["input", "options", "generating", "review", "complete"].map((s, i) => {
-            const steps = ["input", "options", "generating", "review", "complete"];
+          {(() => {
+            const steps = inputType === "file"
+              ? ["input", "generating", "review", "complete"]
+              : ["input", "options", "generating", "review", "complete"];
             const currentIndex = steps.indexOf(step);
-            const stepIndex = i;
-            const isActive = stepIndex <= currentIndex;
-            const isCurrent = s === step;
 
-            return (
-              <div key={s} className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-muted-foreground",
-                    isCurrent && "ring-2 ring-primary/50"
-                  )}
-                >
-                  {stepIndex < currentIndex ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    i + 1
-                  )}
-                </div>
-                {i < 4 && (
+            return steps.map((s, i) => {
+              const isActive = i <= currentIndex;
+              const isCurrent = s === step;
+              const isLast = i === steps.length - 1;
+
+              return (
+                <div key={s} className="flex items-center gap-2">
                   <div
                     className={cn(
-                      "w-12 h-0.5 rounded",
-                      stepIndex < currentIndex ? "bg-primary" : "bg-secondary"
+                      "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all",
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground",
+                      isCurrent && "ring-2 ring-primary/50"
                     )}
-                  />
-                )}
-              </div>
-            );
-          })}
+                  >
+                    {i < currentIndex ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      i + 1
+                    )}
+                  </div>
+                  {!isLast && (
+                    <div
+                      className={cn(
+                        "w-12 h-0.5 rounded",
+                        i < currentIndex ? "bg-primary" : "bg-secondary"
+                      )}
+                    />
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         {/* Step Content */}

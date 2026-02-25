@@ -36,6 +36,8 @@ interface CreationState {
     generatedPodcast: GeneratedPodcast | null;
     editableScript: string;
     coverPreview: string | null;
+    extractedText: string;
+    uploadedFileName: string;
 }
 
 interface CreationContextType extends CreationState {
@@ -55,6 +57,8 @@ interface CreationContextType extends CreationState {
     setGeneratedPodcast: (podcast: GeneratedPodcast | null) => void;
     setEditableScript: (script: string) => void;
     setCoverPreview: (preview: string | null) => void;
+    setExtractedText: (text: string) => void;
+    setUploadedFileName: (name: string) => void;
     resetProgress: () => void;
     prevStep: () => void;
 }
@@ -76,6 +80,8 @@ const initialState: CreationState = {
     generatedPodcast: null,
     editableScript: "",
     coverPreview: null,
+    extractedText: "",
+    uploadedFileName: "",
 };
 
 const CreationContext = createContext<CreationContextType | undefined>(undefined);
@@ -119,6 +125,8 @@ export const CreationProvider = ({ children }: { children: ReactNode }) => {
     const setGeneratedPodcast = (generatedPodcast: GeneratedPodcast | null) => updateState({ generatedPodcast });
     const setEditableScript = (editableScript: string) => updateState({ editableScript });
     const setCoverPreview = (coverPreview: string | null) => updateState({ coverPreview });
+    const setExtractedText = (extractedText: string) => updateState({ extractedText });
+    const setUploadedFileName = (uploadedFileName: string) => updateState({ uploadedFileName });
 
     const resetProgress = () => {
         setState(initialState);
@@ -126,8 +134,12 @@ export const CreationProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const prevStep = () => {
-        const steps: GenerationStep[] = ["input", "options", "generating", "review", "complete"];
+        const standardSteps: GenerationStep[] = ["input", "options", "generating", "review", "complete"];
+        const fileSteps: GenerationStep[] = ["input", "generating", "review", "complete"];
+
+        const steps = state.inputType === "file" ? fileSteps : standardSteps;
         const currentIndex = steps.indexOf(state.step);
+
         if (currentIndex > 0) {
             setStep(steps[currentIndex - 1]);
         }
@@ -153,6 +165,8 @@ export const CreationProvider = ({ children }: { children: ReactNode }) => {
                 setGeneratedPodcast,
                 setEditableScript,
                 setCoverPreview,
+                setExtractedText,
+                setUploadedFileName,
                 resetProgress,
                 prevStep,
             }}
