@@ -1,15 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
 import { Home, Search, Plus, User, Bell, MessageSquare, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 const MobileNav = () => {
   const location = useLocation();
+  const { unreadMessages } = useNotifications();
 
   const navItems = [
     { to: "/feed", label: "Home", icon: Home },
     { to: "/explore", label: "Explore", icon: Compass },
     { to: "/create", label: "Create", icon: Plus, isCreate: true },
-    { to: "/messages", label: "DMs", icon: MessageSquare },
+    { to: "/messages", label: "DMs", icon: MessageSquare, badge: unreadMessages },
     { to: "/profile", label: "Profile", icon: User },
   ];
 
@@ -41,11 +43,18 @@ const MobileNav = () => {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex flex-col items-center gap-1 py-2 px-4 transition-colors",
+                "flex flex-col items-center gap-1 py-2 px-4 transition-colors relative",
                 active ? "text-primary" : "text-muted-foreground"
               )}
             >
-              <Icon className={cn("w-5 h-5", active && "text-primary")} />
+              <div className="relative">
+                <Icon className={cn("w-5 h-5", active && "text-primary")} />
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-2 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold shadow-sm">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+              </div>
               <span className="text-xs font-medium">{item.label}</span>
             </Link>
           );

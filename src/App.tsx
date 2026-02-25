@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { AudioProvider } from "@/contexts/AudioContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { CreationProvider } from "@/contexts/CreationContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import Index from "./pages/Index";
 import Create from "./pages/Create";
 import Feed from "./pages/Feed";
@@ -77,15 +78,17 @@ const App = () => (
     <AuthProvider>
       <SettingsProvider>
         <CreationProvider>
-          <AudioProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <AppRoutes />
-              </BrowserRouter>
-            </TooltipProvider>
-          </AudioProvider>
+          <NotificationProvider>
+            <AudioProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <AppRoutes />
+                </BrowserRouter>
+              </TooltipProvider>
+            </AudioProvider>
+          </NotificationProvider>
         </CreationProvider>
       </SettingsProvider>
     </AuthProvider>

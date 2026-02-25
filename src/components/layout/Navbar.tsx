@@ -4,50 +4,19 @@ import {
   Home, Search, Plus, User, Menu, Headphones, LogOut,
   Bookmark, Bell, MessageSquare, Compass
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/lib/supabase";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { unreadNotifs, unreadMessages } = useNotifications();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [unreadNotifs, setUnreadNotifs] = useState(0);
-  const [unreadMessages, setUnreadMessages] = useState(0);
 
-  // Load unread counts
-  useEffect(() => {
-    if (!user) return;
-    const fetchCounts = async () => {
-      const [{ count: notifs }, { count: msgs }] = await Promise.all([
-        supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_read', false),
-        supabase.from('messages').select('*', { count: 'exact', head: true }).neq('sender_id', user.id).eq('is_read', false)
-      ]);
-      setUnreadNotifs(notifs || 0);
-      setUnreadMessages(msgs || 0);
-    };
-    fetchCounts();
-
-    // Real-time subscriptions for badges
-    const channel = supabase.channel('navbar-sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => setUnreadNotifs(n => n + 1))
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => fetchCounts())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
-        (payload: any) => {
-          if (payload.new.sender_id !== user.id) {
-            setUnreadMessages(m => m + 1);
-          }
-        })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' },
-        () => fetchCounts()) // Refresh when messages are marked as read
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  // Unread counts are now managed globally by NotificationContext
 
   const navLinks = [
     { to: "/feed", label: "Feed", icon: Home },
