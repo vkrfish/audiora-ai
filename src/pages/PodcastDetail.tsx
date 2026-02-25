@@ -26,6 +26,7 @@ interface PodcastData {
     created_at: string;
     likes_count: number;
     comments_count: number;
+    plays_count: number;
     user_id: string;
     audio_url?: string;
     profiles: {
@@ -94,11 +95,12 @@ const PodcastDetail = () => {
             }, (payload: any) => {
                 setPodcast(prev => prev ? {
                     ...prev,
-                    likes_count: payload.new.likes_count,
-                    comments_count: payload.new.comments_count,
-                    title: payload.new.title,
-                    user_caption: payload.new.user_caption,
-                    description: payload.new.description,
+                    likes_count: payload.new.likes_count !== undefined ? payload.new.likes_count : prev.likes_count,
+                    comments_count: payload.new.comments_count !== undefined ? payload.new.comments_count : prev.comments_count,
+                    plays_count: payload.new.plays_count !== undefined ? payload.new.plays_count : prev.plays_count,
+                    title: payload.new.title || prev.title,
+                    user_caption: payload.new.user_caption !== undefined ? payload.new.user_caption : prev.user_caption,
+                    description: payload.new.description || prev.description,
                     cover_url: payload.new.cover_url || prev.cover_url
                 } : null);
             })
@@ -129,14 +131,18 @@ const PodcastDetail = () => {
         };
     }, [id, user]);
 
+    const [isLiking, setIsLiking] = useState(false);
+
     const handleLike = async () => {
         if (!user) { toast.error("Sign in to like"); return; }
-        if (!podcast) return;
+        if (!podcast || isLiking) return;
 
+        setIsLiking(true);
         // Optimistic update
         const wasLiked = isLiked;
         setIsLiked(!wasLiked);
-        setPodcast(prev => prev ? { ...prev, likes_count: prev.likes_count + (wasLiked ? -1 : 1) } : null);
+        // We do NOT optimistic update likes_count here, allowing the realtime db trigger to be the source of truth
+        // This stops the "inconsistency" where local math fights with delayed DB triggers resulting in bouncing numbers
 
         try {
             if (wasLiked) {
@@ -149,11 +155,12 @@ const PodcastDetail = () => {
             }
         } catch (err) {
             setIsLiked(wasLiked); // rollback
-            setPodcast(prev => prev ? { ...prev, likes_count: prev.likes_count + (wasLiked ? 1 : -1) } : null);
+        } finally {
+            setTimeout(() => setIsLiking(false), 500); // Debounce
         }
     };
 
-    const handlePlay = () => {
+    const handlePlay = async () => {
         if (!podcast || !podcast.audio_url) return;
         audio.playTrack({
             id: podcast.id,
@@ -162,6 +169,19 @@ const PodcastDetail = () => {
             coverUrl: podcast.cover_url,
             audioUrl: podcast.audio_url
         });
+
+        // Optimistic plays count update locally so user sees immediate feedback
+        setPodcast(prev => prev ? { ...prev, plays_count: (prev.plays_count || 0) + 1 } : null);
+
+        // Increment plays in DB
+        try {
+            const { data } = await supabase.from('podcasts').select('plays_count').eq('id', podcast.id).single();
+            if (data) {
+                await supabase.from('podcasts').update({ plays_count: (data.plays_count || 0) + 1 }).eq('id', podcast.id);
+            }
+        } catch (err) {
+            console.error("Failed to update play count", err);
+        }
     };
 
     const handleShare = () => {
@@ -260,7 +280,7 @@ const PodcastDetail = () => {
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-muted-foreground flex items-center gap-2"><Headphones className="w-4 h-4" /> Total Plays</span>
-                                    <span className="font-medium">1,234</span>
+                                    <span className="font-medium">{podcast.plays_count || 0}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-muted-foreground flex items-center gap-2"><Heart className="w-4 h-4" /> Likes</span>

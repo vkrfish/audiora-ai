@@ -394,9 +394,14 @@ const Index = () => {
               <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              © 2024 Audiora. All rights reserved.
-            </p>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">
+                © 2024 Audiora. All rights reserved.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Contact: vkr10906@gmail.com | +91 6305118577
+              </p>
+            </div>
           </div>
         </div>
       </footer>
