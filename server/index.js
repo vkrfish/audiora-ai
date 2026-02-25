@@ -62,11 +62,13 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
         console.log(`User Prompt (first 100 chars): ${userPrompt.substring(0, 100)}...`);
 
         // Initialize model
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            systemInstruction: systemPrompt
+        });
 
         // Generate content
         const chatSession = model.startChat({
-            systemInstruction: systemPrompt,
             generationConfig: {
                 temperature: 0.7,
                 topP: 0.95,
