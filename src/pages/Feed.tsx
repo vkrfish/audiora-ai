@@ -233,6 +233,9 @@ const Feed = () => {
       setLikedIds(new Set((likes || []).map((l: any) => l.podcast_id)));
       setSavedIds(new Set((saves || []).map((s: any) => s.podcast_id)));
     };
+
+    fetchPosts();
+    fetchInteractions();
   }, [user]);
 
   // Real-time updates for counts and user interactions
