@@ -61,33 +61,37 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
         console.log(`System Prompt (first 100 chars): ${systemPrompt.substring(0, 100)}...`);
         console.log(`User Prompt (first 100 chars): ${userPrompt.substring(0, 100)}...`);
 
-        // Initialize model
-        const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash",
-            systemInstruction: systemPrompt
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
 
-        // Generate content
-        const chatSession = model.startChat({
-            generationConfig: {
-                temperature: 0.7,
-                topP: 0.95,
-                topK: 64,
-                maxOutputTokens: 8192,
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                "HTTP-Referer": "https://github.com/vkrfish/audiora-ai",
+                "X-Title": "Audiora AI",
+                "Content-Type": "application/json"
             },
+            body: JSON.stringify({
+                model: "google/gemini-2.0-flash-001",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ]
+            }),
+            signal: controller.signal
         });
 
-        // Use Promise.race to implement timeout
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('AbortError')), 120000);
-        });
+        clearTimeout(timeoutId);
 
-        const result = await Promise.race([
-            chatSession.sendMessage(userPrompt),
-            timeoutPromise
-        ]);
+        const data = await response.json();
 
-        const text = result.response.text();
+        if (!response.ok) {
+            console.error('OpenRouter error:', data);
+            return res.status(response.status).json({ error: data.error?.message || 'OpenRouter API error' });
+        }
+
+        const text = data.choices[0].message.content;
         const duration = (Date.now() - startTime) / 1000;
         console.log(`Raw AI Response received in ${duration}s.`);
 
