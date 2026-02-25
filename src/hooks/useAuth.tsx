@@ -20,6 +20,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout: Ensure loading is cleared after 5 seconds regardless of network/auth status
+    const safetyTimeout = setTimeout(() => {
+      setLoading(false);
+      console.warn("Auth initialization safety timeout reached.");
+    }, 5000);
+
     // Get initial session
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
@@ -31,6 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       })
       .finally(() => {
         setLoading(false);
+        clearTimeout(safetyTimeout);
       });
 
     // Listen for auth changes
@@ -40,9 +47,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+      clearTimeout(safetyTimeout);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
