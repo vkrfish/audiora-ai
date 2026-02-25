@@ -484,7 +484,7 @@ const Feed = () => {
     };
 
     return (
-      <div className={cn("glass-card p-4 sm:p-5 animate-fade-in transition-all", isLoaded && "ring-1 ring-primary/50")}>
+      <div className={cn("glass-card p-4 sm:p-5 animate-fade-in transition-all border-border/20", isLoaded && "ring-1 ring-primary/40")}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -540,42 +540,50 @@ const Feed = () => {
           </p>
         )}
 
-        {/* Content */}
-        <div className="flex gap-4 mb-4">
-          <div className="relative group/cover cursor-pointer mb-4 rounded-xl overflow-hidden aspect-video bg-muted/30">
-            <RouterLink to={`/podcast/${post.id}`} className="block w-full h-full">
-              <img src={post.coverUrl} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover/cover:scale-105" />
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity" />
-            </RouterLink>
+        {/* Content Section - Adaptive size, Play on click */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-4 px-1">
+          <div
+            onClick={handlePlayClick}
+            className="relative group/cover cursor-pointer rounded-xl overflow-hidden bg-muted/30 w-full sm:w-48 shrink-0 shadow-sm border border-border/10"
+          >
+            <img
+              src={post.coverUrl}
+              alt={post.title}
+              className="w-full h-auto min-h-[120px] object-cover transition-transform duration-500 group-hover/cover:scale-105"
+            />
+            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-glow">
+                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+              </div>
+            </div>
 
-            <Button
-              variant="player"
-              size="icon-lg"
-              onClick={handlePlayClick}
-              className="absolute bottom-4 right-4 translate-y-2 opacity-0 group-hover/cover:translate-y-0 group-hover/cover:opacity-100 transition-all duration-300 shadow-glow"
-            >
-              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-            </Button>
-
-            <div className="absolute top-4 left-4">
-              <Badge variant="secondary" className="bg-black/40 backdrop-blur-md text-white border-none text-[10px] sm:text-xs">
+            <div className="absolute top-2 left-2">
+              <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none text-[10px] px-1.5 py-0">
                 {post.type === 'short' ? 'Short' : 'Podcast'} · {post.durationStr}
               </Badge>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <RouterLink to={`/podcast/${post.id}`} className="block hover:text-primary transition-colors">
-              <h3 className="font-display font-bold text-lg leading-tight md:text-xl line-clamp-2">{post.title}</h3>
-            </RouterLink>
+          <div
+            onClick={handlePlayClick}
+            className="flex-1 space-y-2 py-1 cursor-pointer group/text"
+          >
+            <h3 className="font-display font-bold text-lg leading-tight group-hover/text:text-primary transition-colors line-clamp-2">
+              {post.title}
+            </h3>
             {post.caption && (
-              <p className="text-sm text-muted-foreground line-clamp-2 italic">"{post.caption}"</p>
+              <p className="text-sm text-muted-foreground line-clamp-3 italic opacity-80">"{post.caption}"</p>
             )}
+            <div className="pt-1">
+              <Badge variant="outline" className="text-[10px] opacity-50 uppercase tracking-tighter">
+                Click to Play
+              </Badge>
+            </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-border/50">
+        <div className="flex items-center justify-between pt-3 border-t border-border/30">
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => handleLike(post.id)}>
               <Heart className={cn("w-4 h-4", likedIds.has(post.id) && "fill-accent text-accent")} />
