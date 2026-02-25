@@ -22,19 +22,30 @@ app.use(express.json());
 // Auth middleware
 const requireAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
+    console.log(`[AUTH DEBUG] Request to ${req.path}`);
+    console.log(`[AUTH DEBUG] Authorization header prefix:`, authHeader ? authHeader.substring(0, 20) : 'MISSING');
+
     if (!authHeader) {
         return res.status(401).json({ error: 'Missing Authorization header' });
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    console.log(`[AUTH DEBUG] Token extracted, length: ${token.length}`);
 
-    if (error || !user) {
-        console.error("Auth Error in requireAuth:", error?.message || "No user found");
+    // Explicitly check the token against Supabase
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error) {
+        console.error("[AUTH DEBUG] getUser error:", error);
+    }
+
+    if (error || !data?.user) {
+        console.error("[AUTH ERROR] requireAuth failed:", error?.message || "No user found");
         return res.status(401).json({ error: error?.message || 'Invalid or expired token' });
     }
 
-    req.user = user;
+    console.log(`[AUTH DEBUG] User authenticated successfully: ${data.user.id}`);
+    req.user = data.user;
     next();
 };
 

@@ -113,20 +113,36 @@ ${sourceContent}
 
 Remember to output valid JSON only, no markdown code blocks.`;
 
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+
+  // Force a session refresh if token might be stale
+  if (session) {
+    const { data: refreshData } = await supabase.auth.refreshSession();
+    if (refreshData.session) {
+      session = refreshData.session;
+    }
+  }
+
   const token = session?.access_token;
+
+  if (!token) {
+    throw new Error('Authentication required. Please log in again.');
+  }
 
   const response = await fetch(`${BACKEND_URL}/api/generate-script`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({ systemPrompt, userPrompt }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
+    }
     throw new Error(errorData.error || `Backend error: ${response.status}`);
   }
 
@@ -136,20 +152,36 @@ Remember to output valid JSON only, no markdown code blocks.`;
 export const generateAudio = async (text: string, language: string = 'en', voice?: string, voice2?: string): Promise<{ audioContent: string; mimeType: string }> => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+
+  // Force a session refresh if token might be stale
+  if (session) {
+    const { data: refreshData } = await supabase.auth.refreshSession();
+    if (refreshData.session) {
+      session = refreshData.session;
+    }
+  }
+
   const token = session?.access_token;
+
+  if (!token) {
+    throw new Error('Authentication required. Please log in again.');
+  }
 
   const response = await fetch(`${BACKEND_URL}/api/generate-audio`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({ text, language, voice, voice2 }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
+    }
     throw new Error(errorData.error || `Backend error: ${response.status}`);
   }
 
