@@ -297,55 +297,96 @@ const Feed = () => {
   useEffect(() => {
     if (activeTab === "following" && user) {
       setFollowingLoading(true);
-      supabase.from('user_follows').select('following_id').eq('follower_id', user.id).then(async ({ data: follows }) => {
-        if (!follows || follows.length === 0) {
-          setFollowingPosts([]);
-          setFollowingLoading(false);
-          return;
-        }
-        const followingIds = follows.map((f: any) => f.following_id);
-        const { data: fpods } = await supabase
-          .from('podcasts')
-          .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, audio_files(file_url), profiles(full_name)')
-          .in('user_id', followingIds)
-          .order('created_at', { ascending: false });
+      const fetchFollowing = async () => {
+        try {
+          const { data: follows, error: followError } = await supabase
+            .from('user_follows')
+            .select('following_id')
+            .eq('follower_id', user.id);
 
-        const fmtd = (fpods || []).map((item: any) => ({
-          id: item.id, type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
-          title: item.title || 'Untitled', description: item.description,
-          caption: item.user_caption,
-          creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
-          coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
-          durationStr: formatDuration(item.estimated_duration || 0),
-          likes: item.likes_count || 0, comments: item.comments_count || 0,
-          audioUrl: item.audio_files?.[0]?.file_url,
-          createdAt: item.created_at
-        }));
-        setFollowingPosts(fmtd);
-        setFollowingLoading(false);
-      });
+          if (followError) throw followError;
+
+          if (!follows || follows.length === 0) {
+            setFollowingPosts([]);
+            return;
+          }
+
+          const followingIds = follows.map((f: any) => f.following_id);
+          const { data: fpods, error: podcastError } = await supabase
+            .from('podcasts')
+            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, audio_files(file_url), profiles(full_name)')
+            .in('user_id', followingIds)
+            .order('created_at', { ascending: false });
+
+          if (podcastError) throw podcastError;
+
+          const fmtd = (fpods || []).map((item: any) => ({
+            id: item.id,
+            type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
+            title: item.title || 'Untitled',
+            description: item.description,
+            caption: item.user_caption,
+            creator: {
+              name: item.profiles?.full_name || 'Unknown',
+              username: 'user_' + item.user_id.substring(0, 5),
+              avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
+              userId: item.user_id
+            },
+            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
+            durationStr: formatDuration(item.estimated_duration || 0),
+            likes: item.likes_count || 0,
+            comments: item.comments_count || 0,
+            audioUrl: item.audio_files?.[0]?.file_url,
+            createdAt: item.created_at
+          }));
+          setFollowingPosts(fmtd);
+        } catch (err) {
+          console.error("Error fetching following feed:", err);
+          setFollowingPosts([]);
+        } finally {
+          setFollowingLoading(false);
+        }
+      };
+      fetchFollowing();
     }
 
     if (activeTab === "trending") {
       setTrendingLoading(true);
-      supabase.from('trending_podcasts')
-        .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, score, audio_files(file_url), profiles(full_name)')
-        .limit(20)
-        .then(({ data: tpods }) => {
+      const fetchTrending = async () => {
+        try {
+          const { data: tpods, error } = await supabase.from('trending_podcasts')
+            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, score, audio_files(file_url), profiles(full_name)')
+            .limit(20);
+
+          if (error) throw error;
+
           const fmtT = (tpods || []).map((item: any) => ({
-            id: item.id, type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
-            title: item.title || 'Untitled', description: item.description,
+            id: item.id,
+            type: (item.type === 'recorded' ? 'short' : 'podcast') as 'short' | 'podcast',
+            title: item.title || 'Untitled',
+            description: item.description,
             caption: item.user_caption,
-            creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
-            coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
+            creator: {
+              name: item.profiles?.full_name || 'Unknown',
+              username: 'user_' + item.user_id.substring(0, 5),
+              avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
+              userId: item.user_id
+            },
+            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
             durationStr: formatDuration(item.estimated_duration || 0),
-            likes: item.likes_count || 0, comments: item.comments_count || 0,
+            likes: item.likes_count || 0,
+            comments: item.comments_count || 0,
             audioUrl: item.audio_files?.[0]?.file_url,
             createdAt: item.created_at
           }));
           setTrendingPosts(fmtT);
+        } catch (err) {
+          console.error("Error fetching trending feed:", err);
+        } finally {
           setTrendingLoading(false);
-        });
+        }
+      };
+      fetchTrending();
     }
   }, [activeTab, user]);
 

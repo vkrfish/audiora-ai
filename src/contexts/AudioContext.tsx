@@ -38,20 +38,38 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
     const [volume, setVolState] = useState(0.8);
 
     useEffect(() => {
-        const audio = new Audio();
-        audio.volume = 0.8;
-        audioRef.current = audio;
+        if (!audioRef.current) {
+            const audio = new Audio();
+            audio.volume = 0.8;
+            audioRef.current = audio;
 
-        audio.addEventListener('play', () => setIsPlaying(true));
-        audio.addEventListener('pause', () => setIsPlaying(false));
-        audio.addEventListener('ended', () => {
-            setIsPlaying(false);
-            // Auto play next if available
-            handleNext();
-        });
+            audio.addEventListener('play', () => setIsPlaying(true));
+            audio.addEventListener('pause', () => setIsPlaying(false));
+            audio.addEventListener('ended', () => {
+                setIsPlaying(false);
+                // We'll use a functional update or a ref to handle the 'next' logic
+                // to avoid stale closures and unnecessary re-attachments and re-creations
+            });
+        }
 
-        return () => { audio.pause(); audio.src = ''; };
-    }, [playlist, currentIndex]); // Re-bind handleNext if dependencies change
+        // Handle 'ended' with a more robust strategy - using a separate effect for playlist logic
+        // is cleaner than re-binding listeners repeatedly.
+    }, []);
+
+    // Effect to handle 'ended' logic without rebuilding the audio object
+    useEffect(() => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        const onEnded = () => {
+            if (playlist.length > 0 && currentIndex < playlist.length - 1) {
+                playAtIndex(currentIndex + 1);
+            }
+        };
+
+        audio.addEventListener('ended', onEnded);
+        return () => audio.removeEventListener('ended', onEnded);
+    }, [playlist, currentIndex]);
 
     // Wrapped handleNext to use in event listener
     const handleNext = () => {
