@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useAudio } from "@/contexts/AudioContext";
+import { Link as RouterLink } from "react-router-dom";
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -15,7 +16,11 @@ const formatTime = (seconds: number) => {
 };
 
 const AudioPlayer = () => {
-  const { currentTrack, isPlaying, volume, togglePlay, seek, setVolume, stopTrack, getAudio } = useAudio();
+  const {
+    currentTrack, isPlaying, volume, togglePlay, seek,
+    setVolume, stopTrack, getAudio, playNext, playPrevious,
+    currentIndex, playlist
+  } = useAudio();
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const rafRef = useRef<number | null>(null);
@@ -75,17 +80,17 @@ const AudioPlayer = () => {
       <div className="container mx-auto px-4 py-2 mt-1">
         <div className="flex items-center justify-between gap-4">
           {/* Track Info */}
-          <div className="flex items-center gap-3 min-w-0 md:flex-1">
+          <RouterLink to={`/podcast/${currentTrack.id}`} className="flex items-center gap-3 min-w-0 md:flex-1 hover:opacity-80 transition-opacity group">
             <img
               src={currentTrack.coverUrl}
               alt={currentTrack.title}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover shadow-sm group-hover:shadow-md transition-shadow"
             />
             <div className="min-w-0">
-              <h4 className="font-medium text-xs md:text-sm truncate">{currentTrack.title}</h4>
+              <h4 className="font-medium text-xs md:text-sm truncate group-hover:text-primary transition-colors">{currentTrack.title}</h4>
               <p className="text-[10px] md:text-xs text-muted-foreground truncate">{currentTrack.creator}</p>
             </div>
-          </div>
+          </RouterLink>
 
           {/* Playback Controls and Time */}
           <div className="flex flex-col items-center gap-1 md:flex-row md:gap-4 md:flex-1 md:justify-center">
@@ -93,7 +98,9 @@ const AudioPlayer = () => {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => seek(Math.max(0, currentTime - 10))}
+                onClick={playPrevious}
+                disabled={currentIndex <= 0}
+                className="hidden sm:flex"
               >
                 <SkipBack className="w-4 h-4" />
               </Button>
@@ -108,7 +115,9 @@ const AudioPlayer = () => {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => seek(Math.min(duration, currentTime + 10))}
+                onClick={playNext}
+                disabled={currentIndex >= playlist.length - 1}
+                className="hidden sm:flex"
               >
                 <SkipForward className="w-4 h-4" />
               </Button>

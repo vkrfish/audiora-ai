@@ -23,24 +23,55 @@ interface PodcastItem {
 
 const PodcastGrid = ({ items, viewMode }: { items: PodcastItem[]; viewMode: "grid" | "list" }) => {
   const audio = useAudio();
+  const navigate = useNavigate();
   if (items.length === 0) return (
     <div className="text-center py-12 text-muted-foreground">No podcasts yet</div>
   );
+  const handlePlay = (e: React.MouseEvent, p: PodcastItem) => {
+    e.stopPropagation();
+    if (!p.audioUrl) return;
+
+    const playlist = items.map(item => ({
+      id: item.id,
+      title: item.title,
+      creator: "You",
+      coverUrl: item.coverUrl,
+      audioUrl: item.audioUrl || ""
+    }));
+
+    audio.playTrack({
+      id: p.id,
+      title: p.title,
+      creator: "You",
+      coverUrl: p.coverUrl,
+      audioUrl: p.audioUrl
+    }, playlist);
+  };
+
   return (
     <div className={cn("grid gap-4", viewMode === "grid" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 max-w-2xl")}>
       {items.map(p => (
         <div key={p.id} className={cn("glass-card overflow-hidden group cursor-pointer", viewMode === "list" && "flex gap-4 items-center p-3")}
-          onClick={() => p.audioUrl && audio.playTrack({ id: p.id, title: p.title, creator: "You", coverUrl: p.coverUrl, audioUrl: p.audioUrl })}>
+          onClick={() => navigate(`/podcast/${p.id}`)}>
           <div className={cn("relative", viewMode === "grid" ? "aspect-square" : "w-14 h-14 shrink-0 rounded-xl overflow-hidden")}>
             <img src={p.coverUrl} alt={p.title} className={cn("object-cover", viewMode === "grid" ? "w-full h-full" : "w-full h-full")} />
             <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-              <Play className="w-6 h-6 text-foreground" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full bg-primary/20 hover:bg-primary/40"
+                onClick={(e) => handlePlay(e, p)}
+              >
+                <Play className="w-6 h-6 text-foreground" />
+              </Button>
             </div>
           </div>
           <div className={cn(viewMode === "grid" ? "p-3" : "flex-1 min-w-0")}>
-            <p className="font-medium text-sm truncate">{p.title}</p>
+            <p className="font-medium text-sm truncate hover:text-primary transition-colors">{p.title}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">{p.duration}</span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">{p.createdAt}</span>
               <span className="text-xs text-muted-foreground">·</span>
               <Heart className="w-3 h-3 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">{formatNum(p.likes)}</span>
@@ -98,13 +129,33 @@ const Profile = () => {
     };
     fetchAll();
 
-    // Real-time subscription for profile changes (counts)
-    const channel = supabase.channel(`profile-${user.id}`)
+    // Real-time synchronization
+    const profileChannel = supabase.channel(`profile-${user.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
         (payload) => setProfile(payload.new))
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    const podcastChannel = supabase.channel('public:podcasts')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'podcasts' }, (payload: any) => {
+        const updated = payload.new;
+        const updateLists = (list: any[]) =>
+          list.map(p => p.id === updated.id ? {
+            ...p,
+            likes: updated.likes_count,
+            title: updated.title,
+            coverUrl: updated.cover_url || p.coverUrl
+          } : p);
+
+        setMyPodcasts(prev => updateLists(prev));
+        setLikedPodcasts(prev => updateLists(prev));
+        setSavedPodcasts(prev => updateLists(prev));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(podcastChannel);
+    };
   }, [user]);
 
   if (loading) return <Layout showPlayer><div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" /></div></Layout>;

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAudio } from "@/contexts/AudioContext";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const CATEGORIES = [
@@ -23,7 +23,6 @@ const CATEGORIES = [
     { id: "general", label: "General" },
 ];
 
-// Masonry tile sizes for variation like Instagram
 const SIZES = [
     "col-span-1 row-span-1",
     "col-span-1 row-span-2",
@@ -36,7 +35,6 @@ const SIZES = [
     "col-span-1 row-span-1",
 ];
 
-// Vibrant gradient overlays for visual variety
 const GRADIENTS = [
     "from-purple-900/80 via-purple-900/40 to-transparent",
     "from-blue-900/80 via-blue-900/40 to-transparent",
@@ -76,16 +74,18 @@ interface ExplorePodcast {
 }
 
 const ExploreTile = ({
-    pod, sizeClass, isFirst
+    pod, sizeClass, isFirst, allPods, user, liked
 }: {
     pod: ExplorePodcast;
     sizeClass: string;
     isFirst: boolean;
+    allPods?: ExplorePodcast[];
+    user: any;
+    liked: boolean;
 }) => {
     const audio = useAudio();
-    const { user } = useAuth();
+    const navigate = useNavigate();
     const [hovered, setHovered] = useState(false);
-    const [liked, setLiked] = useState(false);
     const isPlaying = audio.playingId === pod.id && audio.isPlaying;
     const isLoaded = audio.playingId === pod.id;
     const coverUrl = pod.coverUrl || COVERS[pod.coverIdx % COVERS.length];
@@ -94,13 +94,27 @@ const ExploreTile = ({
     const handlePlay = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!pod.audioUrl) { toast.error("No audio available"); return; }
-        audio.playTrack({ id: pod.id, title: pod.title, creator: pod.creatorName, coverUrl, audioUrl: pod.audioUrl });
+
+        const playlist = (allPods || [pod]).map(p => ({
+            id: p.id,
+            title: p.title,
+            creator: p.creatorName,
+            coverUrl: p.coverUrl || COVERS[p.coverIdx % COVERS.length],
+            audioUrl: p.audioUrl || ""
+        }));
+
+        audio.playTrack({
+            id: pod.id,
+            title: pod.title,
+            creator: pod.creatorName,
+            coverUrl: pod.coverUrl || COVERS[pod.coverIdx % COVERS.length],
+            audioUrl: pod.audioUrl
+        }, playlist);
     };
 
     const handleLike = async (e: React.MouseEvent) => {
         e.stopPropagation();
         if (!user) { toast.error("Sign in to like"); return; }
-        setLiked(!liked);
         if (!liked) {
             await supabase.from('podcast_likes').insert({ user_id: user.id, podcast_id: pod.id });
         } else {
@@ -117,19 +131,15 @@ const ExploreTile = ({
             )}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
+            onClick={() => navigate(`/podcast/${pod.id}`)}
         >
-            {/* Cover image */}
             <img
                 src={coverUrl}
                 alt={pod.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 style={{ minHeight: isFirst ? '300px' : '150px' }}
             />
-
-            {/* Always-on gradient at bottom for text */}
             <div className={cn("absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t", gradient)} />
-
-            {/* Hover overlay with controls */}
             <div className={cn(
                 "absolute inset-0 bg-background/70 flex flex-col items-center justify-center gap-2 transition-opacity duration-200",
                 hovered ? "opacity-100" : "opacity-0"
@@ -138,9 +148,7 @@ const ExploreTile = ({
                     onClick={handlePlay}
                     className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-glow hover:scale-110 transition-transform"
                 >
-                    {isPlaying
-                        ? <Pause className="w-5 h-5 text-primary-foreground" />
-                        : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
+                    {isPlaying ? <Pause className="w-5 h-5 text-primary-foreground" /> : <Play className="w-5 h-5 text-primary-foreground ml-0.5" />}
                 </button>
                 <div className="flex items-center gap-4 text-sm">
                     <button onClick={handleLike} className="flex items-center gap-1">
@@ -153,8 +161,6 @@ const ExploreTile = ({
                     </span>
                 </div>
             </div>
-
-            {/* Bottom info - always visible */}
             <div className="absolute bottom-0 inset-x-0 p-2.5">
                 <p className="text-white font-semibold text-xs line-clamp-1 drop-shadow">{pod.title}</p>
                 <Link
@@ -165,13 +171,9 @@ const ExploreTile = ({
                     @{pod.creatorName}
                 </Link>
             </div>
-
-            {/* Duration badge */}
             <div className="absolute top-2 right-2 bg-background/80 px-1.5 py-0.5 rounded text-xs backdrop-blur-sm">
                 {pod.duration}
             </div>
-
-            {/* Playing indicator */}
             {isLoaded && (
                 <div className="absolute top-2 left-2 flex items-center gap-1 bg-primary/90 px-2 py-0.5 rounded-full">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse" />
@@ -188,67 +190,103 @@ const Explore = () => {
     const [podcasts, setPodcasts] = useState<ExplorePodcast[]>([]);
     const [filtered, setFiltered] = useState<ExplorePodcast[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userLikedIds, setUserLikedIds] = useState<Set<string>>(new Set());
+    const { user } = useAuth();
+    const navigate = useNavigate();
+
+    const fetch = useCallback(async () => {
+        const { data, error } = await supabase
+            .from('podcasts')
+            .select(`
+                id, title, description, niche, estimated_duration, 
+                likes_count, comments_count, user_id, cover_url,
+                audio_files!inner(file_url),
+                profiles!inner(full_name, username)
+            `)
+            .eq('is_public', true)
+            .order('likes_count', { ascending: false })
+            .limit(50);
+
+        if (error) {
+            console.error("Explore fetch error:", error);
+            setLoading(false);
+            return;
+        }
+
+        const formatted: ExplorePodcast[] = (data || []).map((p: any, i: number) => ({
+            id: p.id,
+            title: p.title || 'Untitled',
+            description: p.description,
+            audioUrl: p.audio_files?.[0]?.file_url,
+            creatorName: p.profiles?.username || p.profiles?.full_name || 'user_' + p.user_id.substring(0, 5),
+            creatorId: p.user_id,
+            likes: p.likes_count || 0,
+            comments: p.comments_count || 0,
+            duration: `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`,
+            coverIdx: i,
+            gradientIdx: i,
+            niche: p.niche || 'general',
+            coverUrl: p.cover_url
+        }));
+        setPodcasts(formatted);
+        setFiltered(formatted);
+        setLoading(false);
+    }, []);
 
     useEffect(() => {
-        const fetch = async () => {
-            const { data, error } = await supabase
-                .from('podcasts')
-                .select(`
-                    id, title, description, niche, estimated_duration, 
-                    likes_count, comments_count, user_id, cover_url,
-                    audio_files!inner(file_url),
-                    profiles!inner(full_name, username)
-                `)
-                .eq('is_public', true)
-                .order('likes_count', { ascending: false })
-                .limit(50);
-
-            if (error) {
-                console.error("Explore fetch error:", error);
-                setLoading(false);
-                return;
-            }
-
-            const formatted: ExplorePodcast[] = (data || []).map((p: any, i: number) => ({
-                id: p.id,
-                title: p.title || 'Untitled',
-                description: p.description,
-                audioUrl: p.audio_files?.[0]?.file_url,
-                creatorName: p.profiles?.username || p.profiles?.full_name || 'user_' + p.user_id.substring(0, 5),
-                creatorId: p.user_id,
-                likes: p.likes_count || 0,
-                comments: p.comments_count || 0,
-                duration: `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`,
-                coverIdx: i,
-                gradientIdx: i,
-                niche: p.niche || 'general',
-                coverUrl: p.cover_url
-            }));
-            setPodcasts(formatted);
-            setFiltered(formatted);
-            setLoading(false);
-        };
         fetch();
-    }, []);
+
+        const fetchUserLikes = async () => {
+            if (!user) return;
+            const { data } = await supabase.from('podcast_likes').select('podcast_id').eq('user_id', user.id);
+            if (data) setUserLikedIds(new Set(data.map((l: any) => l.podcast_id)));
+        };
+        fetchUserLikes();
+
+        // Real-time synchronization
+        const podcastChannel = supabase.channel('explore-podcasts-sync')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'podcasts' }, () => {
+                fetch();
+            })
+            .subscribe();
+
+        let likeChannel: any;
+        if (user) {
+            likeChannel = supabase.channel(`explore-likes-${user.id}`)
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'podcast_likes',
+                    filter: `user_id=eq.${user.id}`
+                }, (payload: any) => {
+                    if (payload.eventType === 'INSERT') {
+                        setUserLikedIds(prev => new Set([...prev, payload.new.podcast_id]));
+                    } else if (payload.eventType === 'DELETE') {
+                        setUserLikedIds(prev => {
+                            const n = new Set(prev);
+                            n.delete(payload.old.podcast_id);
+                            return n;
+                        });
+                    }
+                })
+                .subscribe();
+        }
+
+        return () => {
+            supabase.removeChannel(podcastChannel);
+            if (likeChannel) supabase.removeChannel(likeChannel);
+        };
+    }, [user, fetch]);
 
     const applyFilter = useCallback((query: string, category: string) => {
         let result = [...podcasts];
-
-        // Filter by category first
         if (category !== "all") {
             const targetCat = category.toLowerCase().trim();
-            result = result.filter(p =>
-                p.niche && p.niche.toLowerCase().trim() === targetCat
-            );
+            result = result.filter(p => p.niche && p.niche.toLowerCase().trim() === targetCat);
         }
-
-        // Then filter by search query
         if (query.trim()) {
             const q = query.toLowerCase();
-            result = result.filter(p =>
-                p.title.toLowerCase().includes(q) ||
-                p.creatorName.toLowerCase().includes(q)
-            );
+            result = result.filter(p => p.title.toLowerCase().includes(q) || p.creatorName.toLowerCase().includes(q));
         }
         setFiltered(result);
     }, [podcasts]);
@@ -266,13 +304,11 @@ const Explore = () => {
     return (
         <Layout showPlayer>
             <div className="container mx-auto px-4 py-6 max-w-6xl">
-                {/* Header */}
                 <div className="mb-6">
                     <h1 className="text-3xl font-bold gradient-text mb-1">Explore</h1>
                     <p className="text-muted-foreground text-sm">Discover podcasts from creators around the world</p>
                 </div>
 
-                {/* Search Bar */}
                 <div className="relative mb-5">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
@@ -289,7 +325,6 @@ const Explore = () => {
                     )}
                 </div>
 
-                {/* Category pills */}
                 <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-hide">
                     {CATEGORIES.map(cat => (
                         <button
@@ -307,11 +342,10 @@ const Explore = () => {
                     ))}
                 </div>
 
-                {/* Content Grid */}
                 {loading ? (
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                         {Array.from({ length: 9 }).map((_, i) => (
-                            <div key={i} className={cn("rounded-xl bg-card/50 animate-pulse", i === 1 || i === 7 ? "row-span-2" : "row-span-1")} style={{ height: i === 1 || i === 7 ? '320px' : '160px' }} />
+                            <div key={i} className={cn("rounded-xl bg-card/50 animate-pulse", (i % 9 === 1 || i % 9 === 7) ? "row-span-2" : "row-span-1")} style={{ height: (i % 9 === 1 || i % 9 === 7) ? '320px' : '160px' }} />
                         ))}
                     </div>
                 ) : filtered.length === 0 ? (
@@ -321,25 +355,19 @@ const Explore = () => {
                         <p className="text-sm">Try a different search or category</p>
                     </div>
                 ) : (
-                    <>
-                        {/* Instagram-style masonry grid */}
-                        <div className="grid grid-cols-3 gap-1 sm:gap-2 auto-rows-[160px]">
-                            {filtered.map((pod, i) => (
-                                <ExploreTile
-                                    key={pod.id}
-                                    pod={pod}
-                                    sizeClass={SIZES[i % SIZES.length]}
-                                    isFirst={i === 0}
-                                />
-                            ))}
-                        </div>
-
-                        {filtered.length < 6 && (
-                            <p className="text-center text-sm text-muted-foreground mt-8">
-                                {filtered.length} podcast{filtered.length !== 1 ? 's' : ''} found
-                            </p>
-                        )}
-                    </>
+                    <div className="grid grid-cols-3 gap-1 sm:gap-2 auto-rows-[160px]">
+                        {filtered.map((pod, i) => (
+                            <ExploreTile
+                                key={pod.id}
+                                pod={pod}
+                                sizeClass={SIZES[i % SIZES.length]}
+                                isFirst={i === 0}
+                                allPods={filtered}
+                                user={user}
+                                liked={userLikedIds.has(pod.id)}
+                            />
+                        ))}
+                    </div>
                 )}
             </div>
         </Layout>

@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import UpdatePassword from "./pages/UpdatePassword";
 import NotFound from "./pages/NotFound";
 import AuthCallback from "./pages/AuthCallback";
+import PodcastDetail from "./pages/PodcastDetail";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,7 @@ const AppRoutes = () => (
     <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
     <Route path="/signup" element={<AuthRoute><Signup /></AuthRoute>} />
     <Route path="/auth/callback" element={<AuthCallback />} />
+    <Route path="/podcast/:id" element={<ProtectedRoute><PodcastDetail /></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

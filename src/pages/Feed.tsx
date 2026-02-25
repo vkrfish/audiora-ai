@@ -48,6 +48,7 @@ interface AudioPost {
   likes: number;
   comments: number;
   audioUrl?: string;
+  createdAt: string;
 }
 
 const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -211,7 +212,8 @@ const Feed = () => {
           durationStr: formatDuration(item.estimated_duration || 0),
           likes: item.likes_count || 0,
           comments: item.comments_count || 0,
-          audioUrl: item.audio_files?.[0]?.file_url
+          audioUrl: item.audio_files?.[0]?.file_url,
+          createdAt: item.created_at
         }));
         setPosts(formatted);
         // seed comment counts from DB field
@@ -231,9 +233,61 @@ const Feed = () => {
       setLikedIds(new Set((likes || []).map((l: any) => l.podcast_id)));
       setSavedIds(new Set((saves || []).map((s: any) => s.podcast_id)));
     };
+  }, [user]);
 
-    fetchPosts();
-    fetchInteractions();
+  // Real-time updates for counts and user interactions
+  useEffect(() => {
+    // 1. Subscribe to podcast metadata changes (counts, titles, etc)
+    const podcastChannel = supabase
+      .channel('public:podcasts')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'podcasts' }, (payload: any) => {
+        const updated = payload.new;
+        const updateLists = (list: AudioPost[]) =>
+          list.map(p => p.id === updated.id ? {
+            ...p,
+            likes: updated.likes_count,
+            comments: updated.comments_count,
+            title: updated.title,
+            caption: updated.user_caption,
+            coverUrl: updated.cover_url || p.coverUrl
+          } : p);
+
+        setPosts(prev => updateLists(prev));
+        setFollowingPosts(prev => updateLists(prev));
+        setTrendingPosts(prev => updateLists(prev));
+
+        setCommentCounts(prev => ({ ...prev, [updated.id]: updated.comments_count }));
+      })
+      .subscribe();
+
+    // 2. Subscribe to like changes for current user
+    let likeChannel: any;
+    if (user) {
+      likeChannel = supabase
+        .channel(`user-likes-${user.id}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'podcast_likes',
+          filter: `user_id=eq.${user.id}`
+        }, (payload: any) => {
+          if (payload.eventType === 'INSERT') {
+            setLikedIds(prev => new Set([...prev, payload.new.podcast_id]));
+          } else if (payload.eventType === 'DELETE') {
+            setLikedIds(prev => {
+              const n = new Set(prev);
+              n.delete(payload.old.podcast_id);
+              return n;
+            });
+          }
+        })
+        .subscribe();
+    }
+
+    return () => {
+      supabase.removeChannel(podcastChannel);
+      if (likeChannel) supabase.removeChannel(likeChannel);
+    };
   }, [user]);
 
   // Fetch following and trending posts dynamically when those tabs are viewed
@@ -260,7 +314,9 @@ const Feed = () => {
           creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
           coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
           durationStr: formatDuration(item.estimated_duration || 0),
-          likes: item.likes_count || 0, comments: item.comments_count || 0, audioUrl: item.audio_files?.[0]?.file_url
+          likes: item.likes_count || 0, comments: item.comments_count || 0,
+          audioUrl: item.audio_files?.[0]?.file_url,
+          createdAt: item.created_at
         }));
         setFollowingPosts(fmtd);
         setFollowingLoading(false);
@@ -280,7 +336,9 @@ const Feed = () => {
             creator: { name: item.profiles?.full_name || 'Unknown', username: 'user_' + item.user_id.substring(0, 5), avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop', userId: item.user_id },
             coverUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
             durationStr: formatDuration(item.estimated_duration || 0),
-            likes: item.likes_count || 0, comments: item.comments_count || 0, audioUrl: item.audio_files?.[0]?.file_url
+            likes: item.likes_count || 0, comments: item.comments_count || 0,
+            audioUrl: item.audio_files?.[0]?.file_url,
+            createdAt: item.created_at
           }));
           setTrendingPosts(fmtT);
           setTrendingLoading(false);
@@ -399,7 +457,27 @@ const Feed = () => {
 
     const handlePlayClick = () => {
       if (!post.audioUrl) { toast.error("No audio available"); return; }
-      audio.playTrack({ id: post.id, title: post.title, creator: post.creator.name, coverUrl: post.coverUrl, audioUrl: post.audioUrl });
+
+      // Determine which list we are in for the playlist
+      const activeList = activeTab === "for-you" ? posts :
+        activeTab === "following" ? followingPosts :
+          trendingPosts.length > 0 ? trendingPosts : posts;
+
+      const playlist = activeList.map(p => ({
+        id: p.id,
+        title: p.title,
+        creator: p.creator.name,
+        coverUrl: p.coverUrl,
+        audioUrl: p.audioUrl || ""
+      }));
+
+      audio.playTrack({
+        id: post.id,
+        title: post.title,
+        creator: post.creator.name,
+        coverUrl: post.coverUrl,
+        audioUrl: post.audioUrl
+      }, playlist);
     };
 
     return (
@@ -410,7 +488,7 @@ const Feed = () => {
             <img src={post.creator.avatar} alt={post.creator.name} className="w-10 h-10 rounded-full object-cover" />
             <div>
               <RouterLink to={`/profile/${post.creator.userId}`} className="font-medium text-sm hover:underline block">{post.creator.name}</RouterLink>
-              <p className="text-xs text-muted-foreground">@{post.creator.username} · {formatDistanceToNow(new Date(), { addSuffix: true })}</p>
+              <p className="text-xs text-muted-foreground">@{post.creator.username} · {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
             </div>
           </div>
 
@@ -461,25 +539,35 @@ const Feed = () => {
 
         {/* Content */}
         <div className="flex gap-4 mb-4">
-          <div className="relative shrink-0 cursor-pointer group" onClick={handlePlayClick}>
-            <img src={post.coverUrl} alt={post.title} className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover" />
-            <div className={cn(
-              "absolute inset-0 bg-background/60 rounded-xl flex items-center justify-center transition-opacity",
-              isLoaded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-            )}>
-              {isPlaying
-                ? <Pause className="w-8 h-8 text-foreground" />
-                : <Play className="w-8 h-8 text-foreground" />}
-            </div>
-            <div className="absolute bottom-1 right-1 bg-background/80 backdrop-blur-sm px-1.5 py-0.5 rounded text-xs">
-              {post.durationStr}
+          <div className="relative group/cover cursor-pointer mb-4 rounded-xl overflow-hidden aspect-video bg-muted/30">
+            <RouterLink to={`/podcast/${post.id}`} className="block w-full h-full">
+              <img src={post.coverUrl} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover/cover:scale-105" />
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity" />
+            </RouterLink>
+
+            <Button
+              variant="player"
+              size="icon-lg"
+              onClick={handlePlayClick}
+              className="absolute bottom-4 right-4 translate-y-2 opacity-0 group-hover/cover:translate-y-0 group-hover/cover:opacity-100 transition-all duration-300 shadow-glow"
+            >
+              {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+            </Button>
+
+            <div className="absolute top-4 left-4">
+              <Badge variant="secondary" className="bg-black/40 backdrop-blur-md text-white border-none text-[10px] sm:text-xs">
+                {post.type === 'short' ? 'Short' : 'Podcast'} · {post.durationStr}
+              </Badge>
             </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            <Badge variant="secondary" className="text-xs mb-1">{post.type === "short" ? "Short" : "Podcast"}</Badge>
-            <h3 className="font-semibold line-clamp-2 mb-1">{post.title}</h3>
-            {post.description && <p className="text-sm text-muted-foreground line-clamp-2">{post.description}</p>}
+          <div className="space-y-2">
+            <RouterLink to={`/podcast/${post.id}`} className="block hover:text-primary transition-colors">
+              <h3 className="font-display font-bold text-lg leading-tight md:text-xl line-clamp-2">{post.title}</h3>
+            </RouterLink>
+            {post.caption && (
+              <p className="text-sm text-muted-foreground line-clamp-2 italic">"{post.caption}"</p>
+            )}
           </div>
         </div>
 
@@ -568,9 +656,9 @@ const Feed = () => {
               <>
                 <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
                   <TrendingUp className="w-4 h-4 text-primary" />
-                  Ranked by recent engagement + recency
+                  Ranked by engagement + recency
                 </div>
-                <PostList items={trendingPosts.length > 0 ? trendingPosts : [...posts].sort((a, b) => b.likes - a.likes)} />
+                <PostList items={trendingPosts.length > 0 ? trendingPosts : [...posts].sort((a, b) => ((b.likes * 2) + (b.comments * 3)) - ((a.likes * 2) + (a.comments * 3)))} />
               </>
             )}
           </TabsContent>

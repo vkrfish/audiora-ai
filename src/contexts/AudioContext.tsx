@@ -12,14 +12,17 @@ export interface CurrentTrack {
 interface AudioContextType {
     currentTrack: CurrentTrack | null;
     isPlaying: boolean;
+    playlist: CurrentTrack[];
+    currentIndex: number;
     volume: number;
-    playTrack: (track: CurrentTrack) => void;
+    playTrack: (track: CurrentTrack, playlist?: CurrentTrack[]) => void;
+    playNext: () => void;
+    playPrevious: () => void;
     togglePlay: () => void;
     seek: (time: number) => void;
     setVolume: (vol: number) => void;
     stopTrack: () => void;
     playingId: string | null;
-    /** Direct access to the underlying <audio> element for time-sensitive consumers */
     getAudio: () => HTMLAudioElement | null;
 }
 
@@ -29,6 +32,8 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
     const { settings } = useSettings();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [currentTrack, setCurrentTrack] = useState<CurrentTrack | null>(null);
+    const [playlist, setPlaylist] = useState<CurrentTrack[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(-1);
     const [isPlaying, setIsPlaying] = useState(false);
     const [volume, setVolState] = useState(0.8);
 
@@ -39,28 +44,62 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
 
         audio.addEventListener('play', () => setIsPlaying(true));
         audio.addEventListener('pause', () => setIsPlaying(false));
-        audio.addEventListener('ended', () => setIsPlaying(false));
+        audio.addEventListener('ended', () => {
+            setIsPlaying(false);
+            // Auto play next if available
+            handleNext();
+        });
 
         return () => { audio.pause(); audio.src = ''; };
-    }, []);
+    }, [playlist, currentIndex]); // Re-bind handleNext if dependencies change
 
-    // Reactively apply speed
-    useEffect(() => {
-        if (audioRef.current && settings.audio.defaultSpeed) {
-            audioRef.current.playbackRate = Number(settings.audio.defaultSpeed);
+    // Wrapped handleNext to use in event listener
+    const handleNext = () => {
+        if (playlist.length > 0 && currentIndex < playlist.length - 1) {
+            playAtIndex(currentIndex + 1);
         }
-    }, [settings.audio.defaultSpeed]);
+    };
 
-    const playTrack = async (track: CurrentTrack) => {
-        if (!audioRef.current) return;
-        if (currentTrack?.id === track.id) {
-            isPlaying ? audioRef.current.pause() : await audioRef.current.play();
-            return;
-        }
+    const playAtIndex = async (index: number) => {
+        if (!audioRef.current || index < 0 || index >= playlist.length) return;
+        const track = playlist[index];
+        setCurrentIndex(index);
         setCurrentTrack(track);
         audioRef.current.src = track.audioUrl;
         audioRef.current.load();
         try { await audioRef.current.play(); } catch (e) { console.error('Play failed:', e); }
+    };
+
+    const playTrack = async (track: CurrentTrack, newPlaylist?: CurrentTrack[]) => {
+        if (!audioRef.current) return;
+
+        if (newPlaylist) {
+            setPlaylist(newPlaylist);
+            const idx = newPlaylist.findIndex(t => t.id === track.id);
+            setCurrentIndex(idx !== -1 ? idx : 0);
+        }
+
+        if (currentTrack?.id === track.id) {
+            isPlaying ? audioRef.current.pause() : await audioRef.current.play();
+            return;
+        }
+
+        setCurrentTrack(track);
+        audioRef.current.src = track.audioUrl;
+        audioRef.current.load();
+        try { await audioRef.current.play(); } catch (e) { console.error('Play failed:', e); }
+    };
+
+    const playNext = () => {
+        if (currentIndex < playlist.length - 1) {
+            playAtIndex(currentIndex + 1);
+        }
+    };
+
+    const playPrevious = () => {
+        if (currentIndex > 0) {
+            playAtIndex(currentIndex - 1);
+        }
     };
 
     const togglePlay = async () => {
@@ -82,6 +121,8 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
             audioRef.current.pause();
             audioRef.current.src = '';
             setCurrentTrack(null);
+            setPlaylist([]);
+            setCurrentIndex(-1);
             setIsPlaying(false);
         }
     };
@@ -90,8 +131,12 @@ export const AudioProvider = ({ children }: { children: ReactNode }) => {
         <AudioCtx.Provider value={{
             currentTrack,
             isPlaying,
+            playlist,
+            currentIndex,
             volume,
             playTrack,
+            playNext,
+            playPrevious,
             togglePlay,
             seek,
             setVolume,

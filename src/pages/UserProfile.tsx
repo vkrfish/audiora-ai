@@ -38,9 +38,9 @@ const UserProfile = () => {
         const fetchAll = async () => {
             const [{ data: prof }, { data: pods }, { data: liked }] = await Promise.all([
                 supabase.from('profiles').select('*').eq('id', userId).single(),
-                supabase.from('podcasts').select('id, title, estimated_duration, likes_count, created_at, audio_files(file_url)')
+                supabase.from('podcasts').select('id, title, estimated_duration, likes_count, created_at, cover_url, audio_files(file_url)')
                     .eq('user_id', userId).order('created_at', { ascending: false }),
-                supabase.from('podcast_likes').select('podcast_id, podcasts(id, title, estimated_duration, likes_count, audio_files(file_url))')
+                supabase.from('podcast_likes').select('podcast_id, podcasts(id, title, estimated_duration, likes_count, created_at, cover_url, audio_files(file_url))')
                     .eq('user_id', userId)
             ]);
 
@@ -60,13 +60,32 @@ const UserProfile = () => {
         };
         fetchAll();
 
-        // Subscribe to profile changes (like count updates from triggers)
-        const channel = supabase.channel(`profile-${userId}`)
+        // Real-time synchronization
+        const profileChannel = supabase.channel(`profile-${userId}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
                 (payload) => setProfile(payload.new))
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        const podcastChannel = supabase.channel('public:podcasts')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'podcasts' }, (payload: any) => {
+                const updated = payload.new;
+                const updateLists = (list: any[]) =>
+                    list.map(p => p.id === updated.id ? {
+                        ...p,
+                        likes_count: updated.likes_count,
+                        title: updated.title,
+                        cover_url: updated.cover_url || p.cover_url
+                    } : p);
+
+                setPodcasts(prev => updateLists(prev));
+                setLikedPodcasts(prev => updateLists(prev));
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(profileChannel);
+            supabase.removeChannel(podcastChannel);
+        };
     }, [userId, user]);
 
     const handleFollow = async () => {
@@ -102,31 +121,61 @@ const UserProfile = () => {
     const displayName = profile.full_name || `User ${userId?.substring(0, 8)}`;
     const username = profile.username || 'user_' + userId?.substring(0, 8);
 
-    const PodList = ({ items }: { items: any[] }) => items.length === 0
-        ? <div className="text-center py-12 text-muted-foreground">No podcasts yet</div>
-        : (
-            <div className={cn("grid gap-4", viewMode === "grid" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 max-w-2xl")}>
-                {items.map((p: any) => (
-                    <div key={p.id} className={cn("glass-card overflow-hidden group cursor-pointer", viewMode === "list" && "flex gap-4 items-center p-3")}
-                        onClick={() => p.audioUrl && audio.playTrack({ id: p.id, title: p.title || 'Untitled', creator: displayName, coverUrl: coverPodcast, audioUrl: p.audioUrl })}>
-                        <div className={cn("relative", viewMode === "grid" ? "aspect-square" : "w-14 h-14 shrink-0 rounded-xl overflow-hidden")}>
-                            <img src={coverPodcast} alt={p.title} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <Play className="w-6 h-6 text-foreground" />
+    const PodList = ({ items }: { items: any[] }) => {
+        const handlePlay = (e: React.MouseEvent, p: any) => {
+            e.stopPropagation();
+            if (!p.audioUrl) return;
+
+            const playlist = items.map(item => ({
+                id: item.id,
+                title: item.title || 'Untitled',
+                creator: displayName,
+                coverUrl: item.cover_url || coverPodcast,
+                audioUrl: item.audioUrl || ""
+            }));
+
+            audio.playTrack({
+                id: p.id,
+                title: p.title || 'Untitled',
+                creator: displayName,
+                coverUrl: p.cover_url || coverPodcast,
+                audioUrl: p.audioUrl
+            }, playlist);
+        };
+
+        return items.length === 0
+            ? <div className="text-center py-12 text-muted-foreground">No podcasts yet</div>
+            : (
+                <div className={cn("grid gap-4", viewMode === "grid" ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" : "grid-cols-1 max-w-2xl")}>
+                    {items.map((p: any) => (
+                        <div key={p.id} className={cn("glass-card overflow-hidden group cursor-pointer", viewMode === "list" && "flex gap-4 items-center p-3")}
+                            onClick={() => navigate(`/podcast/${p.id}`)}>
+                            <div className={cn("relative", viewMode === "grid" ? "aspect-square" : "w-14 h-14 shrink-0 rounded-xl overflow-hidden")}>
+                                <img src={p.cover_url || coverPodcast} alt={p.title} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="rounded-full bg-primary/20 hover:bg-primary/40"
+                                        onClick={(e) => handlePlay(e, p)}
+                                    >
+                                        <Play className="w-6 h-6 text-foreground" />
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className={cn(viewMode === "grid" ? "p-3" : "flex-1 min-w-0")}>
+                                <p className="font-medium text-sm truncate hover:text-primary transition-colors">{p.title || 'Untitled'}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-muted-foreground">{p.durationStr}</span>
+                                    <Heart className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">{formatNum(p.likes_count || 0)}</span>
+                                </div>
                             </div>
                         </div>
-                        <div className={cn(viewMode === "grid" ? "p-3" : "flex-1 min-w-0")}>
-                            <p className="font-medium text-sm truncate">{p.title || 'Untitled'}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs text-muted-foreground">{p.durationStr}</span>
-                                <Heart className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">{formatNum(p.likes_count || 0)}</span>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        );
+                    ))}
+                </div>
+            );
+    };
 
     const isPrivateAndRestricted = profile?.is_private && !isFollowing && !isOwnProfile;
 
