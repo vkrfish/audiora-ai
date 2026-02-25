@@ -534,11 +534,11 @@ const Feed = () => {
     };
 
     return (
-      <div className={cn("glass-card p-4 sm:p-5 animate-fade-in transition-all border-border/20", isLoaded && "ring-1 ring-primary/40")}>
+      <div className={cn("glass-card p-3 sm:p-5 animate-fade-in transition-all border-border/20", isLoaded && "ring-1 ring-primary/40")}>
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <img src={post.creator.avatar} alt={post.creator.name} className="w-10 h-10 rounded-full object-cover" />
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <img src={post.creator.avatar} alt={post.creator.name} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover" />
             <div>
               <RouterLink to={`/profile/${post.creator.userId}`} className="font-medium text-sm hover:underline block">{post.creator.name}</RouterLink>
               <p className="text-xs text-muted-foreground">@{post.creator.username} · {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
@@ -590,43 +590,45 @@ const Feed = () => {
           </p>
         )}
 
-        {/* Content Section - Adaptive size, Play on click */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-4 px-1">
+        {/* Content Section - Compact size, Play on click */}
+        <div className="flex flex-row gap-3 sm:gap-4 mb-3 sm:mb-4">
           <div
             onClick={handlePlayClick}
-            className="relative group/cover cursor-pointer rounded-xl overflow-hidden bg-muted/30 w-full sm:w-48 shrink-0 shadow-sm border border-border/10"
+            className="relative group/cover cursor-pointer rounded-lg sm:rounded-xl overflow-hidden bg-muted/30 w-24 sm:w-48 shrink-0 shadow-sm border border-border/10"
           >
             <img
               src={post.coverUrl}
               alt={post.title}
-              className="w-full h-auto min-h-[120px] object-cover transition-transform duration-500 group-hover/cover:scale-105"
+              className="w-full h-[96px] sm:h-auto sm:min-h-[120px] object-cover transition-transform duration-500 group-hover/cover:scale-105"
             />
             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-glow">
-                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-glow">
+                {isPlaying ? <Pause className="w-4 h-4 sm:w-5 sm:h-5 fill-current" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current outline-none border-none pl-0.5" />}
               </div>
             </div>
 
-            <div className="absolute top-2 left-2">
-              <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none text-[10px] px-1.5 py-0">
-                {post.type === 'short' ? 'Short' : 'Podcast'} · {post.durationStr}
+            <div className="absolute top-1 left-1 sm:top-2 sm:left-2">
+              <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none text-[8px] sm:text-[10px] px-1.5 py-0 sm:py-0">
+                {post.durationStr}
               </Badge>
             </div>
           </div>
 
           <div
             onClick={handlePlayClick}
-            className="flex-1 space-y-2 py-1 cursor-pointer group/text"
+            className="flex-1 flex flex-col py-0 sm:py-1 cursor-pointer group/text min-w-0"
           >
-            <h3 className="font-display font-bold text-lg leading-tight group-hover/text:text-primary transition-colors line-clamp-2">
+            <h3 className="font-display font-bold text-sm sm:text-lg leading-snug group-hover/text:text-primary transition-colors line-clamp-2 mb-1">
               {post.title}
             </h3>
-            {post.caption && (
-              <p className="text-sm text-muted-foreground line-clamp-3 italic opacity-80">"{post.caption}"</p>
+            {post.caption ? (
+              <p className="text-[11px] sm:text-sm text-muted-foreground line-clamp-2 sm:line-clamp-3 italic opacity-80 mb-1">"{post.caption}"</p>
+            ) : (
+              <p className="text-[11px] sm:text-sm text-muted-foreground line-clamp-2 mb-1">{post.description}</p>
             )}
-            <div className="pt-1">
-              <Badge variant="outline" className="text-[10px] opacity-50 uppercase tracking-tighter">
-                Click to Play
+            <div className="mt-auto pt-1 flex items-center">
+              <Badge variant="outline" className="text-[8px] sm:text-[10px] opacity-70 uppercase tracking-tighter sm:tracking-normal px-1 sm:px-2.5">
+                {post.type === 'short' ? 'Short' : 'Podcast'}
               </Badge>
             </div>
           </div>

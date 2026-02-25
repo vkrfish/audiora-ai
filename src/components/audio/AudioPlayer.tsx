@@ -77,53 +77,58 @@ const AudioPlayer = () => {
         />
       </div>
 
-      <div className="container mx-auto px-4 py-2 mt-1">
-        <div className="flex items-center justify-between gap-4">
+      <div className="container mx-auto px-3 md:px-4 py-2 mt-1">
+        <div className="flex items-center justify-between gap-2 md:gap-4">
           {/* Track Info */}
-          <RouterLink to={`/podcast/${currentTrack.id}`} className="flex items-center gap-3 min-w-0 md:flex-1 hover:opacity-80 transition-opacity group">
+          <RouterLink to={`/podcast/${currentTrack.id}`} className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 hover:opacity-80 transition-opacity group">
             <img
               src={currentTrack.coverUrl}
               alt={currentTrack.title}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover shadow-sm group-hover:shadow-md transition-shadow"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-lg object-cover shadow-sm group-hover:shadow-md transition-shadow shrink-0"
             />
-            <div className="min-w-0">
-              <h4 className="font-medium text-xs md:text-sm truncate group-hover:text-primary transition-colors">{currentTrack.title}</h4>
-              <p className="text-[10px] md:text-xs text-muted-foreground truncate">{currentTrack.creator}</p>
+            <div className="min-w-0 pr-2">
+              <h4 className="font-medium text-[13px] leading-tight md:text-sm truncate group-hover:text-primary transition-colors">{currentTrack.title}</h4>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">{currentTrack.creator}</p>
+                <span className="text-muted-foreground text-[8px] md:hidden">•</span>
+                <span className="text-[10px] text-muted-foreground tabular-nums opacity-80 md:hidden">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
             </div>
           </RouterLink>
 
           {/* Playback Controls and Time */}
-          <div className="flex flex-col items-center gap-1 md:flex-row md:gap-4 md:flex-1 md:justify-center">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={playPrevious}
-                disabled={currentIndex <= 0}
-                className="hidden sm:flex"
-              >
-                <SkipBack className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="player"
-                size="icon-lg"
-                onClick={togglePlay}
-                className="shadow-glow-sm"
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={playNext}
-                disabled={currentIndex >= playlist.length - 1}
-                className="hidden sm:flex"
-              >
-                <SkipForward className="w-4 h-4" />
-              </Button>
-            </div>
-            {/* Time display now visible on all screens */}
-            <span className="text-[10px] md:text-xs text-muted-foreground tabular-nums">
+          <div className="flex items-center gap-2 md:gap-4 shrink-0 md:flex-1 md:justify-center pr-6 md:pr-0">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={playPrevious}
+              disabled={currentIndex <= 0}
+              className="hidden sm:flex"
+            >
+              <SkipBack className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="player"
+              size="icon-lg"
+              onClick={togglePlay}
+              className="w-10 h-10 md:w-12 md:h-12 rounded-full shadow-glow-sm shrink-0 flex items-center justify-center p-0"
+            >
+              {isPlaying ? <Pause className="w-4 h-4 md:w-5 md:h-5" /> : <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={playNext}
+              disabled={currentIndex >= playlist.length - 1}
+              className="hidden sm:flex"
+            >
+              <SkipForward className="w-4 h-4" />
+            </Button>
+
+            {/* Time display on desktop */}
+            <span className="hidden md:inline text-xs text-muted-foreground tabular-nums md:ml-2">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>

@@ -183,25 +183,25 @@ const PodcastDetail = () => {
                     <span>Back</span>
                 </Button>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
                     {/* Main Content */}
-                    <div className="lg:col-span-2 space-y-8">
+                    <div className="lg:col-span-2 space-y-6 md:space-y-8">
                         <div className="flex flex-col md:flex-row gap-6">
-                            <div className="w-full md:w-64 aspect-square rounded-2xl overflow-hidden shadow-elevated shrink-0">
+                            <div className="w-full max-w-[240px] mx-auto md:mx-0 md:max-w-none md:w-64 aspect-square rounded-2xl overflow-hidden shadow-elevated shrink-0">
                                 <img src={podcast.cover_url} alt={podcast.title} className="w-full h-full object-cover" />
                             </div>
 
-                            <div className="flex-1 flex flex-col justify-end">
-                                <div className="flex items-center gap-2 mb-2">
+                            <div className="flex-1 flex flex-col justify-end text-center md:text-left items-center md:items-start">
+                                <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
                                     <Badge variant="secondary" className="bg-primary/10 text-primary border-none">Podcast</Badge>
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
                                         {Math.floor(podcast.estimated_duration / 60)}:{(podcast.estimated_duration % 60).toString().padStart(2, '0')}
                                     </span>
                                 </div>
-                                <h1 className="text-3xl md:text-4xl font-display font-bold mb-4">{podcast.title}</h1>
+                                <h1 className="text-2xl md:text-4xl font-display font-bold mb-3 md:mb-4 px-4 md:px-0">{podcast.title}</h1>
 
-                                <div className="flex items-center gap-4 mb-6">
+                                <div className="flex items-center justify-center md:justify-start gap-4 mb-6">
                                     <RouterLink to={`/profile/${podcast.user_id}`} className="flex items-center gap-2 group">
                                         <img src={podcast.profiles.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=50&h=50&fit=crop"} className="w-8 h-8 rounded-full object-cover" />
                                         <span className="font-medium text-sm group-hover:underline">{podcast.profiles.full_name}</span>
@@ -210,19 +210,21 @@ const PodcastDetail = () => {
                                     <span className="text-muted-foreground text-sm">{formatDistanceToNow(new Date(podcast.created_at), { addSuffix: true })}</span>
                                 </div>
 
-                                <div className="flex flex-wrap gap-3">
-                                    <Button size="lg" className="rounded-full gap-2 px-8 shadow-glow" onClick={handlePlay}>
+                                <div className="flex flex-col sm:flex-row flex-wrap justify-center md:justify-start gap-3 w-full sm:w-auto px-6 sm:px-0">
+                                    <Button size="lg" className="rounded-full gap-2 px-8 shadow-glow w-full sm:w-auto" onClick={handlePlay}>
                                         {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
                                         <span>{isPlaying ? 'Pause' : 'Play Now'}</span>
                                     </Button>
-                                    <Button size="lg" variant="secondary" className="rounded-full gap-2 px-6" onClick={handleLike}>
-                                        <Heart className={cn("w-5 h-5", isLiked && "fill-primary text-primary")} />
-                                        <span>{podcast.likes_count}</span>
-                                    </Button>
-                                    <Button size="lg" variant="secondary" className="rounded-full gap-2 px-6" onClick={handleShare}>
-                                        <Share2 className="w-5 h-5" />
-                                        <span>Share</span>
-                                    </Button>
+                                    <div className="flex gap-3 w-full sm:w-auto">
+                                        <Button size="lg" variant="secondary" className="rounded-full gap-2 px-6 flex-1 sm:flex-none" onClick={handleLike}>
+                                            <Heart className={cn("w-5 h-5", isLiked && "fill-primary text-primary")} />
+                                            <span>{podcast.likes_count}</span>
+                                        </Button>
+                                        <Button size="lg" variant="secondary" className="rounded-full gap-2 px-6 flex-1 sm:flex-none" onClick={handleShare}>
+                                            <Share2 className="w-5 h-5" />
+                                            <span>Share</span>
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
