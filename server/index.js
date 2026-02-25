@@ -3,65 +3,26 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
-import { execFile, execFileSync } from 'child_process';
+import { execFile } from 'child_process';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 import { supabase } from './supabase.js';
-import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Log ALL requests early
-app.use((req, res, next) => {
-    const startTime = Date.now();
-    const size = req.headers['content-length'];
-    console.log(`[${new Date().toISOString()}] INCOMING: ${req.method} ${req.url} - Size: ${size || 'unknown'} bytes`);
-
-    // Log when response is finished
-    res.on('finish', () => {
-        const duration = Date.now() - startTime;
-        console.log(`[${new Date().toISOString()}] OUTGOING: ${req.method} ${req.url} - Status: ${res.statusCode} - Duration: ${duration}ms`);
-    });
-
-    next();
-});
-
 app.use(cors());
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
-
-// Configure Multer for file uploads (disk storage for Python access)
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
-
-const upload = multer({
-    storage: storage,
-    limits: { fileSize: 200 * 1024 * 1024 } // 200MB limit
-});
+app.use(express.json());
 
 // Auth middleware
 const requireAuth = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-        console.warn(`[${new Date().toISOString()}] AUTH FAILED: No Authorization header for ${req.url}`);
         return res.status(401).json({ error: 'Missing Authorization header' });
     }
 
@@ -69,7 +30,6 @@ const requireAuth = async (req, res, next) => {
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-        console.warn(`[${new Date().toISOString()}] AUTH FAILED: Invalid token for ${req.url}. Error: ${error?.message || 'No user found'}`);
         return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
@@ -79,40 +39,6 @@ const requireAuth = async (req, res, next) => {
 
 // Initialize Google SDK for Audio (Gemini 2.0 Flash)
 const genAI = new GoogleGenerativeAI(process.env.VITE_GEMINI_API_KEY);
-
-// New endpoint to parse PDF/DOCX files using Python
-app.post('/api/parse-file', requireAuth, upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
-
-        const filePath = req.file.path;
-        console.log(`[${new Date().toISOString()}] Parsing file with Python: ${req.file.originalname} (${req.file.mimetype})`);
-
-        // Execute the python parser script
-        execFile('python', ['parse_document.py', filePath], { maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
-            // Delete temp file after parsing
-            try { fs.unlinkSync(filePath); } catch (e) { console.error('Failed to delete temp file:', e); }
-
-            if (error) {
-                console.error('Python Parsing error:', stderr);
-                return res.status(500).json({ error: 'Failed to extract text: ' + stderr });
-            }
-
-            const extractedText = stdout.trim();
-            if (!extractedText) {
-                return res.status(400).json({ error: 'Could not extract any text from this file.' });
-            }
-
-            console.log(`[${new Date().toISOString()}] Successfully extracted ${extractedText.length} characters.`);
-            res.json({ text: extractedText });
-        });
-    } catch (error) {
-        console.error('File parsing error:', error);
-        res.status(500).json({ error: 'Failed to parse file: ' + error.message });
-    }
-});
 
 // Endpoint to generate podcast script using OpenRouter (Step 3.5 Flash)
 app.post('/api/generate-script', requireAuth, async (req, res) => {
@@ -135,7 +61,7 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: "openai/gpt-4o-mini",
+                model: "google/gemini-2.0-flash-001", // Switched to a more reliable model
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }
@@ -149,11 +75,8 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
         const data = await response.json();
 
         if (!response.ok) {
-            console.error(`[${new Date().toISOString()}] OpenRouter error (${response.status}):`, JSON.stringify(data, null, 2));
-            return res.status(response.status).json({
-                error: data.error?.message || 'OpenRouter API error',
-                details: data
-            });
+            console.error('OpenRouter error:', data);
+            return res.status(response.status).json({ error: data.error?.message || 'OpenRouter API error' });
         }
 
         const text = data.choices[0].message.content;
@@ -255,19 +178,6 @@ app.post('/api/generate-audio', requireAuth, async (req, res) => {
     } catch (error) {
         console.error('Audio generation error:', error);
         res.status(500).json({ error: error.message });
-    }
-});
-
-// Global Error Handler
-app.use((err, req, res, next) => {
-    if (err) {
-        console.error(`[${new Date().toISOString()}] SERVER ERROR (${err.status || 500}): ${err.message}`);
-        if (err.status === 413) {
-            console.error('Payload too large! Current limits: JSON/URL 100mb, Multer 100mb');
-        }
-        res.status(err.status || 500).json({ error: err.message });
-    } else {
-        next();
     }
 });
 

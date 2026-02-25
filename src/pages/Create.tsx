@@ -313,10 +313,6 @@ const Create = () => {
       let fileContent = "";
       if (inputType === "file" && uploadedFile) {
         fileContent = await readFileContent(uploadedFile);
-        console.log(`[Create] Extracted file content length: ${fileContent.length}`);
-        if (fileContent.length < 10) {
-          console.warn("[Create] Warning: Extracted text is very short. AI might generate generic content.");
-        }
       }
 
       // Step 2: Generate podcast script

@@ -107,15 +107,8 @@ ${podcastType === 'conversation'
     sourceContent = fileContent;
   }
 
-  if (!sourceContent || sourceContent.trim().length < 5) {
-    console.error(`[Frontend] Cannot generate podcast. Source content is empty or too short. Type: ${inputType}`);
-    throw new Error("No content found to generate a podcast from. Please check your topic, text, or file.");
-  }
+  const userPrompt = `Create a podcast script based on the following:
 
-  const userPrompt = `Create a highly relevant podcast script strictly based on the provided source content. 
-Do NOT use generic filler text. If the content is a resume, talk about the professional background and skills.
-
-SOURCE CONTENT:
 ${sourceContent}
 
 Remember to output valid JSON only, no markdown code blocks.`;
@@ -123,22 +116,17 @@ Remember to output valid JSON only, no markdown code blocks.`;
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
 
-  const payload = JSON.stringify({ systemPrompt, userPrompt });
-  console.log(`[Frontend] Sending script generation request. Payload size: ${payload.length} chars`);
-
-  console.log(`[Frontend] Calling script generation at: ${BACKEND_URL}/api/generate-script`);
   const response = await fetch(`${BACKEND_URL}/api/generate-script`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     },
-    body: payload,
+    body: JSON.stringify({ systemPrompt, userPrompt }),
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    console.error(`[Frontend] Generation failed with status ${response.status}:`, errorData);
     throw new Error(errorData.error || `Backend error: ${response.status}`);
   }
 
@@ -168,40 +156,30 @@ export const generateAudio = async (text: string, language: string = 'en', voice
   return response.json();
 };
 
-export const readFileContent = async (file: File): Promise<string> => {
-  // For text files, read locally
-  if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string || "");
-      reader.onerror = () => reject(new Error('Failed to read text file'));
+export const readFileContent = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === 'string') {
+        resolve(result);
+      } else {
+        reject(new Error('Failed to read file'));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+
+    // For text files, read as text
+    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
       reader.readAsText(file);
-    });
-  }
-
-  // For other files (PDF, DOCX), use the backend parser
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const response = await fetch(`${BACKEND_URL}/api/parse-file`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    },
-    body: formData,
+    } else {
+      // For PDF and DOCX, we'll just read as text for now
+      // In production, you'd want to use a proper parser
+      reader.readAsText(file);
+    }
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Failed to extract text from ${file.name}`);
-  }
-
-  const data = await response.json();
-  return data.text;
 };
 
 export const uploadImage = async (file: File, userId: string): Promise<string> => {
