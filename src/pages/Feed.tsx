@@ -194,9 +194,15 @@ const Feed = () => {
 
   useEffect(() => {
     const fetchPosts = async () => {
+      // 5-second safety timeout for the main feed loading
+      const safetyTimeout = setTimeout(() => {
+        setLoading(false);
+      }, 5000);
+
       try {
         const data = await getPublicPodcasts();
         const formatted: AudioPost[] = data.map((item: any) => ({
+          // ... (keep same mapping)
           id: item.id,
           type: item.type === "recorded" ? "short" : "podcast",
           title: item.title || "Untitled Podcast",
@@ -221,7 +227,10 @@ const Feed = () => {
         formatted.forEach(p => { counts[p.id] = p.comments; });
         setCommentCounts(counts);
       } catch (err) { console.error(err); }
-      finally { setLoading(false); }
+      finally {
+        setLoading(false);
+        clearTimeout(safetyTimeout);
+      }
     };
 
     const fetchInteractions = async () => {
