@@ -7,6 +7,8 @@ import { execFile } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { supabase } from './supabase.js';
+import multer from 'multer';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +20,22 @@ const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// Set up storage for voice samples
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        cb(null, `${req.user.id}_${Date.now()}_${file.originalname}`);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// Path to python executable in venv
+const pythonPath = path.join(__dirname, 'venv', 'Scripts', 'python.exe');
+const clonedVoicesDir = path.join(__dirname, 'cloned_voices');
 
 // Auth middleware
 const requireAuth = async (req, res, next) => {
@@ -171,7 +189,7 @@ app.post('/api/generate-audio', requireAuth, async (req, res) => {
         }));
 
         // Execute the python script with the JSON payload
-        execFile('python', [pythonScript, JSON.stringify(payload)], { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+        execFile(pythonPath, [pythonScript, JSON.stringify(payload)], { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
                 console.error('Edge TTS Execution error:', stderr);
                 return res.status(500).json({ error: 'Audio generation process failed', details: stderr });
@@ -189,6 +207,63 @@ app.post('/api/generate-audio', requireAuth, async (req, res) => {
         });
     } catch (error) {
         console.error('Audio generation error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint to clone a voice locally
+app.post('/api/clone-voice', requireAuth, upload.single('sample'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No audio sample uploaded' });
+        }
+
+        const speakerName = req.body.name || `voice_${req.user.id}`;
+        const referenceAudioPath = req.file.path;
+        const cloningScript = path.join(__dirname, 'clone_voice.py');
+
+        console.log(`Cloning voice for user ${req.user.id} with name ${speakerName}`);
+
+        execFile(pythonPath, [cloningScript, referenceAudioPath, clonedVoicesDir, req.user.id], (error, stdout, stderr) => {
+            if (error) {
+                console.error('Cloning script execution error:', stderr);
+                return res.status(500).json({ error: 'Cloning process failed', details: stderr });
+            }
+
+            try {
+                const result = JSON.parse(stdout.trim());
+                res.json(result);
+            } catch (parseError) {
+                console.error('Failed to parse cloning script output:', stdout);
+                res.status(500).json({ error: 'Invalid response from cloning script' });
+            } finally {
+                // Cleanup uploaded file
+                fs.unlink(referenceAudioPath, (err) => {
+                    if (err) console.error('Error deleting temp file:', err);
+                });
+            }
+        });
+    } catch (error) {
+        console.error('Clone voice error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Endpoint to list cloned voices for the user
+app.get('/api/voices', requireAuth, async (req, res) => {
+    try {
+        const files = await fs.promises.readdir(clonedVoicesDir);
+        const userVoices = files
+            .filter(f => f.startsWith(`${req.user.id}_`) && f.endsWith('_se.pth'))
+            .map(f => ({
+                id: f.replace('_se.pth', ''),
+                name: 'My Cloned Voice', // In a real app, we'd store the name in DB
+                type: 'cloned'
+            }));
+
+        res.json(userVoices);
+    } catch (error) {
+        console.error('Error listing voices:', error);
         res.status(500).json({ error: error.message });
     }
 });

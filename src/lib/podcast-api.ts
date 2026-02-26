@@ -11,6 +11,8 @@ interface GeneratePodcastParams {
   podcastType?: 'solo' | 'conversation';
   voiceName?: string;
   voice2Name?: string;
+  isClonedVoice?: boolean;
+  isClonedVoice2?: boolean;
 }
 
 interface PodcastScript {
@@ -184,6 +186,56 @@ export const generateAudio = async (text: string, language: string = 'en', voice
     }
     throw new Error(errorData.error || `Backend error: ${response.status}`);
   }
+
+  return response.json();
+};
+
+export const cloneVoice = async (audioBlob: Blob, name: string): Promise<{ status: string; speaker_name: string; se_path: string; message: string }> => {
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  let { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  if (!token) {
+    throw new Error('Authentication required. Please log in again.');
+  }
+
+  const formData = new FormData();
+  formData.append('sample', audioBlob, 'sample.wav');
+  formData.append('name', name);
+
+  const response = await fetch(`${BACKEND_URL}/api/clone-voice`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Backend error: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+export const getClonedVoices = async (): Promise<{ id: string; name: string; type: string }[]> => {
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  let { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  if (!token) return [];
+
+  const response = await fetch(`${BACKEND_URL}/api/voices`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+  });
+
+  if (!response.ok) return [];
 
   return response.json();
 };
