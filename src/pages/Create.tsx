@@ -41,7 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import Waveform from "@/components/audio/Waveform";
-import { generatePodcast, generateAudio, readFileContent, cloneVoice, getClonedVoices } from "@/lib/podcast-api";
+import { generatePodcast, generateAudio, readFileContent } from "@/lib/podcast-api";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -103,26 +103,6 @@ const Create = () => {
   const audioPlayer = useAudioPlayer();
   const [isSaving, setIsSaving] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const [clonedVoices, setClonedVoices] = useState<{ id: string; name: string; type: string }[]>([]);
-  const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false);
-  const [isCloning, setIsCloning] = useState(false);
-  const [cloneSample, setCloneSample] = useState<Blob | null>(null);
-  const [cloneName, setCloneName] = useState("");
-  const [isCloneRecording, setIsCloneRecording] = useState(false);
-
-  useEffect(() => {
-    fetchClonedVoices();
-  }, [user]);
-
-  const fetchClonedVoices = async () => {
-    if (!user) return;
-    try {
-      const voices = await getClonedVoices();
-      setClonedVoices(voices);
-    } catch (err) {
-      console.error("Failed to fetch cloned voices", err);
-    }
-  };
 
   // Auto-select best voices based on language
   useEffect(() => {
@@ -210,29 +190,21 @@ const Create = () => {
 
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setRecordedAudio(audioBlob);
 
-        if (isCloneRecording) {
-          setCloneSample(audioBlob);
-        } else {
-          setRecordedAudio(audioBlob);
-          // Also load it for preview immediately
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = () => {
-            const base64data = reader.result as string;
-            // remove data:audio/webm;base64, prefix
-            const base64str = base64data.split(',')[1];
-            audioPlayer.loadBase64Audio(base64str, 'audio/webm');
-          };
-        }
+        // Also load it for preview immediately
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          // remove data:audio/webm;base64, prefix
+          const base64str = base64data.split(',')[1];
+          audioPlayer.loadBase64Audio(base64str, 'audio/webm');
+        };
       };
 
       mediaRecorder.start();
-      if (isCloneDialogOpen) {
-        setIsCloneRecording(true);
-      } else {
-        setIsRecording(true);
-      }
+      setIsRecording(true);
     } catch (err) {
       console.error("Failed to start recording", err);
       toast.error("Microphone access is required to record audio.");
@@ -240,10 +212,9 @@ const Create = () => {
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && (isRecording || isCloneRecording)) {
+    if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      setIsCloneRecording(false);
       // Stop all tracks to release mic
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
@@ -436,25 +407,6 @@ const Create = () => {
       console.error('Audio generation failed:', error);
       toast.error("Audio generation failed, but your script is still ready!");
       setStep("review");
-    }
-  };
-
-  const handleCloneVoice = async () => {
-    if (!cloneSample || !cloneName) return;
-
-    setIsCloning(true);
-    try {
-      await cloneVoice(cloneSample, cloneName);
-      toast.success("Voice cloned successfully!");
-      setIsCloneDialogOpen(false);
-      setCloneSample(null);
-      setCloneName("");
-      fetchClonedVoices();
-    } catch (err: any) {
-      console.error("Cloning failed", err);
-      toast.error(err.message || "Failed to clone voice.");
-    } finally {
-      setIsCloning(false);
     }
   };
 
@@ -797,21 +749,12 @@ const Create = () => {
           <div className="flex items-center gap-2 mb-4">
             <Mic className="w-5 h-5 text-primary" />
             <Label className="text-base font-medium">Voice AI</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto h-8 gap-1.5 text-xs"
-              onClick={() => setIsCloneDialogOpen(true)}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Clone My Voice
-            </Button>
           </div>
           <div className="space-y-4">
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">{podcastType === 'conversation' ? 'Primary Speaker Voice' : 'Voice Selection'}</Label>
               <div className="space-y-2">
-                {[...clonedVoices, ...voices].map((v) => (
+                {voices.map((v) => (
                   <button
                     key={v.id}
                     onClick={() => setVoice(v.id)}
@@ -819,13 +762,11 @@ const Create = () => {
                       "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
                       voice === v.id
                         ? "border-primary bg-primary/10"
-                        : "border-border bg-secondary/30 hover:bg-secondary/50",
-                      (v as any).type === 'cloned' && "border-accent/40 bg-accent/5"
+                        : "border-border bg-secondary/30 hover:bg-secondary/50"
                     )}
                   >
-                    <div className="text-left w-full flex items-center justify-between">
+                    <div className="text-left w-full">
                       <span className="font-medium block text-sm">{v.name}</span>
-                      {(v as any).type === 'cloned' && <Badge variant="outline" className="text-[10px] h-4 px-1">Cloned</Badge>}
                     </div>
                   </button>
                 ))}
@@ -836,7 +777,7 @@ const Create = () => {
               <div>
                 <Label className="text-xs text-muted-foreground mb-2 block">Secondary Speaker Voice</Label>
                 <div className="space-y-2">
-                  {[...clonedVoices, ...voices].map((v) => (
+                  {voices.map((v) => (
                     <button
                       key={v.id}
                       onClick={() => setVoice2(v.id)}
@@ -844,13 +785,11 @@ const Create = () => {
                         "w-full flex items-center justify-between p-3 rounded-lg border transition-all",
                         voice2 === v.id
                           ? "border-primary bg-primary/10"
-                          : "border-border bg-secondary/30 hover:bg-secondary/50",
-                        (v as any).type === 'cloned' && "border-accent/40 bg-accent/5"
+                          : "border-border bg-secondary/30 hover:bg-secondary/50"
                       )}
                     >
-                      <div className="text-left w-full flex items-center justify-between">
+                      <div className="text-left w-full">
                         <span className="font-medium block text-sm">{v.name}</span>
-                        {(v as any).type === 'cloned' && <Badge variant="outline" className="text-[10px] h-4 px-1">Cloned</Badge>}
                       </div>
                     </button>
                   ))}
@@ -1261,105 +1200,6 @@ const Create = () => {
             >
               <Share2 className="w-4 h-4" />
               {coverPreview ? "Post with Image" : "Post without Image"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Voice Cloning Dialog */}
-      <Dialog open={isCloneDialogOpen} onOpenChange={(open) => {
-        if (!isCloning) setIsCloneDialogOpen(open);
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              Clone Your Voice
-            </DialogTitle>
-            <DialogDescription>
-              Record a 10-20 second clip of yourself speaking clearly in a quiet environment.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="clone-name">Voice Name</Label>
-              <Textarea
-                id="clone-name"
-                placeholder="e.g., My Professional Voice"
-                value={cloneName}
-                onChange={(e) => setCloneName(e.target.value)}
-                className="resize-none h-10"
-                disabled={isCloning}
-              />
-            </div>
-
-            <div className="flex flex-col items-center justify-center gap-4 p-8 border-2 border-dashed border-border rounded-xl bg-secondary/20">
-              {!isCloneRecording ? (
-                <Button
-                  onClick={startRecording}
-                  disabled={isCloning}
-                  size="lg"
-                  className={cn(
-                    "rounded-full w-20 h-20 shadow-lg transition-all",
-                    cloneSample ? "bg-secondary text-foreground" : "bg-red-500 hover:bg-red-600 shadow-red-500/20"
-                  )}
-                >
-                  {cloneSample ? <Check className="w-10 h-10 text-green-500" /> : <Mic className="w-10 h-10 text-white" />}
-                </Button>
-              ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="flex items-center gap-2 text-red-500 animate-pulse font-medium">
-                    <div className="w-3 h-3 rounded-full bg-red-500" />
-                    Recording...
-                  </div>
-                  <Button
-                    onClick={stopRecording}
-                    size="lg"
-                    className="rounded-full w-20 h-20 bg-secondary hover:bg-secondary/80 border-4 border-red-500"
-                  >
-                    <div className="w-6 h-6 bg-red-500 rounded-sm" />
-                  </Button>
-                </div>
-              )}
-
-              <div className="text-center">
-                <p className="font-medium text-sm">
-                  {cloneSample ? "Sample recorded!" : isCloneRecording ? "Speak now..." : "Click to start recording"}
-                </p>
-                {cloneSample && !isCloneRecording && (
-                  <Button variant="link" size="sm" onClick={() => setCloneSample(null)} className="text-xs text-muted-foreground">
-                    Record again
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {isCloning && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs mb-1">
-                  <span>Cloning your voice...</span>
-                  <span>This may take 30-60 seconds</span>
-                </div>
-                <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                  <div className="h-full bg-primary animate-progress-indeterminate" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsCloneDialogOpen(false)} disabled={isCloning}>
-              Cancel
-            </Button>
-            <Button
-              variant="hero"
-              onClick={handleCloneVoice}
-              className="gap-2"
-              disabled={isCloning || !cloneSample || !cloneName}
-            >
-              {isCloning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {isCloning ? "Cloning..." : "Start Cloning"}
             </Button>
           </DialogFooter>
         </DialogContent>
