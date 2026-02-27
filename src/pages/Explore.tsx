@@ -48,7 +48,7 @@ const GRADIENTS = [
 ];
 
 const COVERS = [
-    "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=600&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=600&h=600&fit=crop",
     "https://images.unsplash.com/photo-1509909756405-be0199881695?w=600&h=600&fit=crop",
     "https://images.unsplash.com/photo-1478737270239-2f02b77fc618?w=600&h=600&fit=crop",
     "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&h=600&fit=crop",

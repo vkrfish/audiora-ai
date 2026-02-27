@@ -117,7 +117,7 @@ const Saved = () => {
                                                 id: podcast.id,
                                                 title: podcast.title,
                                                 creator: "Audiora",
-                                                coverUrl: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop",
+                                                coverUrl: "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=400&h=400&fit=crop",
                                                 audioUrl: podcast.audioUrl,
                                             });
                                         }}

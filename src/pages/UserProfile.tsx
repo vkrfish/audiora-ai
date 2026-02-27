@@ -31,7 +31,7 @@ const UserProfile = () => {
     const isOwnProfile = user?.id === userId;
     const avatarPlaceholder = "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=400&h=400&fit=crop";
     const coverPlaceholder = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=400&fit=crop";
-    const coverPodcast = "https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop";
+    const coverPodcast = "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=400&h=400&fit=crop";
 
     useEffect(() => {
         if (!userId) return;

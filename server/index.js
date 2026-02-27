@@ -127,7 +127,8 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userPrompt }
-                ]
+                ],
+                max_tokens: 4096
             }),
             signal: controller.signal
         });

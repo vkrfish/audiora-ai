@@ -1,2 +1,13 @@
 edge-tts
 asyncio
+torch
+torchaudio
+librosa
+faster-whisper
+pydub
+numpy
+scipy
+eng-to-ipa
+inflect
+unidecode
+whisper
