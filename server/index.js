@@ -10,7 +10,9 @@ import { supabase } from './supabase.js';
 import multer from 'multer';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+const _pdfParse = require('pdf-parse');
+const pdfParse = _pdfParse.default ?? _pdfParse;
+
 const mammoth = require('mammoth');
 
 const __filename = fileURLToPath(import.meta.url);

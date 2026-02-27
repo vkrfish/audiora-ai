@@ -3,10 +3,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Home, Users, TrendingUp, Play, Heart, MessageCircle,
+  Search, ArrowLeft, Home, Users, TrendingUp, Play, Heart, MessageCircle,
   Share2, MoreHorizontal, Bookmark, Trash2, Link, Pause, Download, Send, X,
-  Edit, Image as ImageIcon, Sparkles, Loader2, Check
+  Edit, Image as ImageIcon, Loader2, Check, Headphones, Mic, Music2, Radio,
+  Volume2, Music, Sparkles, Zap, MessageSquare
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -49,6 +51,24 @@ interface AudioPost {
   comments: number;
   audioUrl?: string;
   createdAt: string;
+}
+
+interface ChatConversation {
+  id: string;
+  otherUserId: string;
+  otherName: string;
+  otherAvatar: string;
+  lastMessage: string;
+  lastMessageAt: string;
+  unread: boolean;
+}
+
+interface ChatMessage {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  is_read: boolean;
 }
 
 const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -183,6 +203,22 @@ const Feed = () => {
   const { user } = useAuth();
   const audio = useAudio();
 
+  // Suggested users state
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+
+  // Chat window state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   // Edit states
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<AudioPost | null>(null);
@@ -243,9 +279,133 @@ const Feed = () => {
       setSavedIds(new Set((saves || []).map((s: any) => s.podcast_id)));
     };
 
+    const fetchSuggestions = async () => {
+      if (!user) return;
+      setSuggestionsLoading(true);
+      try {
+        // 1. Get current user profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        setCurrentUserProfile(profile);
+
+        // 2. Get who user follows
+        const { data: follows } = await supabase
+          .from('user_follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+        const fIds = new Set((follows || []).map((f: any) => f.following_id));
+        setFollowingIds(fIds);
+
+        // 3. Get potential suggestions (users not followed and not current user)
+        const { data: others } = await supabase
+          .from('profiles')
+          .select('*')
+          .neq('id', user.id)
+          .limit(20);
+
+        // Filter out already followed
+        const suggested = (others || [])
+          .filter((u: any) => !fIds.has(u.id))
+          .slice(0, 5);
+
+        setSuggestedUsers(suggested);
+      } catch (err) {
+        console.error("Error fetching suggestions:", err);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    };
+
     fetchPosts();
     fetchInteractions();
+    fetchSuggestions();
   }, [user]);
+
+  // Messages and Conversations fetching for floating chat
+  useEffect(() => {
+    if (!user || !isChatOpen) return;
+
+    const fetchConvs = async () => {
+      const { data } = await supabase
+        .from('conversations')
+        .select('*')
+        .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
+        .order('last_message_at', { ascending: false });
+
+      if (!data) return;
+
+      const formatted: ChatConversation[] = await Promise.all(data.map(async (c: any) => {
+        const otherId = c.participant_1 === user.id ? c.participant_2 : c.participant_1;
+        const { data: prof } = await supabase.from('profiles').select('full_name, avatar_url').eq('id', otherId).single();
+        return {
+          id: c.id,
+          otherUserId: otherId,
+          otherName: prof?.full_name || `User ${otherId.substring(0, 5)}`,
+          otherAvatar: prof?.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop",
+          lastMessage: c.last_message || 'New conversation',
+          lastMessageAt: c.last_message_at ? formatDistanceToNow(new Date(c.last_message_at), { addSuffix: true }) : '',
+          unread: false // Simplified for now
+        };
+      }));
+      setChatConversations(formatted);
+    };
+
+    fetchConvs();
+
+    // Subscribe to new messages globally to refresh conversation list
+    const channel = supabase.channel('chat-pill-sync')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+        fetchConvs();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, isChatOpen]);
+
+  useEffect(() => {
+    if (!activeConvId || !user || !isChatOpen) return;
+
+    const fetchMsgs = async () => {
+      setIsMessagesLoading(true);
+      const { data } = await supabase.from('messages')
+        .select('*').eq('conversation_id', activeConvId)
+        .order('created_at', { ascending: true });
+      setChatMessages(data || []);
+      setIsMessagesLoading(false);
+    };
+    fetchMsgs();
+
+    const channel = supabase.channel(`mini-chat-${activeConvId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConvId}` },
+        (payload) => {
+          const msg = payload.new as ChatMessage;
+          setChatMessages(prev => [...prev, msg]);
+        })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [activeConvId, user, isChatOpen]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
+  const handleSendChatMessage = async () => {
+    if (!user || !activeConvId || !chatInput.trim()) return;
+    setChatSending(true);
+    const content = chatInput.trim();
+    setChatInput('');
+    try {
+      await supabase.from('messages').insert({ conversation_id: activeConvId, sender_id: user.id, content });
+      await supabase.from('conversations').update({ last_message: content, last_message_at: new Date().toISOString() }).eq('id', activeConvId);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send message");
+    } finally {
+      setChatSending(false);
+    }
+  };
 
   // Real-time updates for counts and user interactions
   useEffect(() => {
@@ -399,6 +559,40 @@ const Feed = () => {
     }
   }, [activeTab, user]);
 
+  const handleSidebarFollow = async (targetUserId: string) => {
+    if (!user) { toast.error("Sign in to follow"); return; }
+
+    // Optimistic UI
+    setFollowingIds(prev => new Set([...prev, targetUserId]));
+    setSuggestedUsers(prev => prev.filter(u => u.id !== targetUserId));
+
+    try {
+      const { error } = await supabase
+        .from('user_follows')
+        .insert({ follower_id: user.id, following_id: targetUserId });
+
+      if (error) throw error;
+
+      // Notify
+      await supabase.from('notifications').insert({
+        user_id: targetUserId,
+        actor_id: user.id,
+        type: 'follow'
+      });
+
+      toast.success("Following");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to follow");
+      // Rollback optimistic UI (simplified)
+      setFollowingIds(prev => {
+        const next = new Set(prev);
+        next.delete(targetUserId);
+        return next;
+      });
+    }
+  };
+
   const handleLike = async (postId: string) => {
     if (!user) { toast.error("Sign in to like"); return; }
     const isLiked = likedIds.has(postId);
@@ -501,8 +695,8 @@ const Feed = () => {
     }
   };
 
-  /* ── Card ── */
-  const AudioPostCard = ({ post }: { post: AudioPost }) => {
+  /* ── Sleek Card ── */
+  const AudioPostCard = ({ post, index }: { post: AudioPost; index: number }) => {
     const isPlaying = audio.playingId === post.id && audio.isPlaying;
     const isLoaded = audio.playingId === post.id;
     const isCurrentUser = user?.id === post.creator.userId;
@@ -510,222 +704,520 @@ const Feed = () => {
 
     const handlePlayClick = () => {
       if (!post.audioUrl) { toast.error("No audio available"); return; }
-
-      // Determine which list we are in for the playlist
       const activeList = activeTab === "for-you" ? posts :
         activeTab === "following" ? followingPosts :
           trendingPosts.length > 0 ? trendingPosts : posts;
-
-      const playlist = activeList.map(p => ({
-        id: p.id,
-        title: p.title,
-        creator: p.creator.name,
-        coverUrl: p.coverUrl,
-        audioUrl: p.audioUrl || ""
-      }));
-
-      audio.playTrack({
-        id: post.id,
-        title: post.title,
-        creator: post.creator.name,
-        coverUrl: post.coverUrl,
-        audioUrl: post.audioUrl
-      }, playlist);
+      const playlist = activeList.map(p => ({ id: p.id, title: p.title, creator: p.creator.name, coverUrl: p.coverUrl, audioUrl: p.audioUrl || "" }));
+      audio.playTrack({ id: post.id, title: post.title, creator: post.creator.name, coverUrl: post.coverUrl, audioUrl: post.audioUrl }, playlist);
     };
 
     return (
-      <div className={cn("glass-card p-3 sm:p-5 animate-fade-in transition-all border-border/20", isLoaded && "ring-1 ring-primary/40")}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <img src={post.creator.avatar} alt={post.creator.name} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover" />
-            <div>
-              <RouterLink to={`/profile/${post.creator.userId}`} className="font-medium text-sm hover:underline block">{post.creator.name}</RouterLink>
-              <p className="text-xs text-muted-foreground">@{post.creator.username} · {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
-            </div>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm"><MoreHorizontal className="w-4 h-4" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => handleSave(post.id)} className="gap-2">
-                <Bookmark className={cn("w-4 h-4", savedIds.has(post.id) && "fill-primary text-primary")} />
-                {savedIds.has(post.id) ? "Unsave" : "Save"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleCopyLink(post.id)} className="gap-2">
-                <Link className="w-4 h-4" />Copy Link
-              </DropdownMenuItem>
-              {post.audioUrl && (
-                <DropdownMenuItem className="gap-2" onClick={() => {
-                  const a = document.createElement('a');
-                  a.href = post.audioUrl!;
-                  a.download = `${post.title}.mp3`;
-                  a.target = '_blank';
-                  a.click();
-                }}>
-                  <Download className="w-4 h-4" />Download
-                </DropdownMenuItem>
-              )}
-              {isCurrentUser && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleEditClick(post)} className="gap-2">
-                    <Edit className="w-4 h-4" />Edit Podcast
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleDelete(post.id)} className="gap-2 text-destructive focus:text-destructive">
-                    <Trash2 className="w-4 h-4" />Delete
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* Caption */}
-        {post.caption && (
-          <p className="text-sm mb-4 leading-relaxed whitespace-pre-wrap">
-            {post.caption}
-          </p>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.05 }}
+        className={cn(
+          "group rounded-2xl border transition-all duration-300 overflow-hidden",
+          isLoaded
+            ? "border-primary/40 bg-white/[0.07] shadow-[0_0_28px_rgba(61,218,186,0.12)]"
+            : "border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.07] hover:border-white/[0.14]"
+        )}
+      >
+        {/* Playing bar */}
+        {isLoaded && (
+          <div className="h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
         )}
 
-        {/* Content Section - Compact size, Play on click */}
-        <div className="flex flex-row gap-3 sm:gap-4 mb-3 sm:mb-4">
-          <div
-            onClick={handlePlayClick}
-            className="relative group/cover cursor-pointer rounded-lg sm:rounded-xl overflow-hidden bg-muted/30 w-24 sm:w-48 shrink-0 shadow-sm border border-border/10"
-          >
-            <img
-              src={post.coverUrl}
-              alt={post.title}
-              className="w-full h-[96px] sm:h-auto sm:min-h-[120px] object-cover transition-transform duration-500 group-hover/cover:scale-105"
-            />
-            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/90 flex items-center justify-center shadow-glow">
-                {isPlaying ? <Pause className="w-4 h-4 sm:w-5 sm:h-5 fill-current" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current outline-none border-none pl-0.5" />}
+        <div className="p-4">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3">
+            <RouterLink to={`/profile/${post.creator.userId}`} className="flex items-center gap-2.5 group/author">
+              <img src={post.creator.avatar} alt={post.creator.name} className="w-8 h-8 rounded-xl object-cover border border-white/10" />
+              <div>
+                <p className="font-bold text-xs group-hover/author:text-primary transition-colors">{post.creator.name}</p>
+                <p className="text-[10px] text-muted-foreground/40">@{post.creator.username} · {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+              </div>
+            </RouterLink>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition-all">
+                  <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => handleSave(post.id)} className="gap-2">
+                  <Bookmark className={cn("w-4 h-4", savedIds.has(post.id) && "fill-primary text-primary")} />
+                  {savedIds.has(post.id) ? "Unsave" : "Save"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleCopyLink(post.id)} className="gap-2">
+                  <Link className="w-4 h-4" />Copy Link
+                </DropdownMenuItem>
+                {post.audioUrl && (
+                  <DropdownMenuItem className="gap-2" onClick={() => { const a = document.createElement('a'); a.href = post.audioUrl!; a.download = `${post.title}.mp3`; a.target = '_blank'; a.click(); }}>
+                    <Download className="w-4 h-4" />Download
+                  </DropdownMenuItem>
+                )}
+                {isCurrentUser && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleEditClick(post)} className="gap-2"><Edit className="w-4 h-4" />Edit</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDelete(post.id)} className="gap-2 text-destructive focus:text-destructive"><Trash2 className="w-4 h-4" />Delete</DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Caption */}
+          {post.caption && (
+            <p className="text-xs text-muted-foreground/70 mb-3 leading-relaxed line-clamp-2 pl-[2.625rem]">{post.caption}</p>
+          )}
+
+          {/* Cover + info row */}
+          <div className="flex gap-3 cursor-pointer" onClick={handlePlayClick}>
+            <div className="relative w-32 sm:w-44 shrink-0 rounded-2xl overflow-hidden bg-white/5 aspect-[4/3]">
+              <img src={post.coverUrl} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-lg">
+                  {isPlaying ? <Pause className="w-4 h-4 text-black fill-current" /> : <Play className="w-4 h-4 text-black fill-current ml-0.5" />}
+                </div>
+              </div>
+              <div className="absolute top-1.5 left-1.5 bg-black/50 backdrop-blur-sm text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/10 text-white">{post.durationStr}</div>
+            </div>
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <h3 className="font-bold text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors mb-1">{post.title}</h3>
+              {!post.caption && <p className="text-[11px] text-muted-foreground/40 line-clamp-2">{post.description}</p>}
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-primary/60 bg-primary/10 px-2 py-0.5 rounded-full">{post.type === 'short' ? 'Short' : 'Podcast'}</span>
               </div>
             </div>
+          </div>
 
-            <div className="absolute top-1 left-1 sm:top-2 sm:left-2">
-              <Badge variant="secondary" className="bg-black/60 backdrop-blur-md text-white border-none text-[8px] sm:text-[10px] px-1.5 py-0 sm:py-0">
-                {post.durationStr}
-              </Badge>
+          {/* Action row */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.04]">
+            <div className="flex items-center gap-1">
+              <button onClick={() => handleLike(post.id)} className={cn(
+                "flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all",
+                likedIds.has(post.id) ? "bg-rose-500/10 text-rose-400" : "hover:bg-white/[0.04] text-muted-foreground/40 hover:text-muted-foreground"
+              )}>
+                <Heart className={cn("w-3.5 h-3.5", likedIds.has(post.id) && "fill-current")} />
+                {formatNumber(post.likes)}
+              </button>
+              <button onClick={() => toggleComments(post.id)} className={cn(
+                "flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all",
+                showComments ? "bg-primary/10 text-primary" : "hover:bg-white/[0.04] text-muted-foreground/40 hover:text-muted-foreground"
+              )}>
+                <MessageCircle className={cn("w-3.5 h-3.5", showComments && "fill-primary/20")} />
+                {formatNumber(commentCounts[post.id] ?? 0)}
+              </button>
+              <button onClick={() => handleCopyLink(post.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-muted-foreground/40 hover:text-muted-foreground hover:bg-white/[0.04] transition-all">
+                <Share2 className="w-3.5 h-3.5" />
+              </button>
             </div>
+            <button onClick={() => handleSave(post.id)} className={cn(
+              "p-1.5 rounded-full transition-all",
+              savedIds.has(post.id) ? "text-primary" : "text-muted-foreground/30 hover:text-muted-foreground"
+            )}>
+              <Bookmark className={cn("w-3.5 h-3.5", savedIds.has(post.id) && "fill-current")} />
+            </button>
           </div>
 
-          <div
-            onClick={handlePlayClick}
-            className="flex-1 flex flex-col py-0 sm:py-1 cursor-pointer group/text min-w-0"
-          >
-            <h3 className="font-display font-bold text-sm sm:text-lg leading-snug group-hover/text:text-primary transition-colors line-clamp-2 mb-1">
-              {post.title}
-            </h3>
-            {post.caption ? (
-              <p className="text-[11px] sm:text-sm text-muted-foreground line-clamp-2 sm:line-clamp-3 italic opacity-80 mb-1">"{post.caption}"</p>
-            ) : (
-              <p className="text-[11px] sm:text-sm text-muted-foreground line-clamp-2 mb-1">{post.description}</p>
-            )}
-            <div className="mt-auto pt-1 flex items-center">
-              <Badge variant="outline" className="text-[8px] sm:text-[10px] opacity-70 uppercase tracking-tighter sm:tracking-normal px-1 sm:px-2.5">
-                {post.type === 'short' ? 'Short' : 'Podcast'}
-              </Badge>
-            </div>
-          </div>
+          {/* Comment panel */}
+          {showComments && (
+            <CommentPanel postId={post.id} onClose={() => setOpenComments(null)}
+              onUpdateCount={(delta) => setCommentCounts(prev => ({ ...prev, [post.id]: Math.max(0, (prev[post.id] || 0) + delta) }))} />
+          )}
         </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-3 border-t border-border/30">
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => handleLike(post.id)}>
-              <Heart className={cn("w-4 h-4", likedIds.has(post.id) && "fill-accent text-accent")} />
-              <span className="text-xs">{formatNumber(post.likes)}</span>
-            </Button>
-            <Button variant="ghost" size="sm" className={cn("gap-1.5", showComments && "text-primary")} onClick={() => toggleComments(post.id)}>
-              <MessageCircle className={cn("w-4 h-4", showComments && "fill-primary/20 text-primary")} />
-              <span className="text-xs">{formatNumber(commentCounts[post.id] ?? 0)}</span>
-            </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => handleCopyLink(post.id)}>
-              <Share2 className="w-4 h-4" />
-              <span className="text-xs">Share</span>
-            </Button>
-          </div>
-          <Button variant="ghost" size="icon-sm" onClick={() => handleSave(post.id)}>
-            <Bookmark className={cn("w-4 h-4", savedIds.has(post.id) && "fill-primary text-primary")} />
-          </Button>
-        </div>
-
-        {/* Inline Comment Panel */}
-        {showComments && (
-          <CommentPanel
-            postId={post.id}
-            onClose={() => setOpenComments(null)}
-            onUpdateCount={(delta) => {
-              setCommentCounts(prev => ({
-                ...prev,
-                [post.id]: Math.max(0, (prev[post.id] || 0) + delta)
-              }));
-            }}
-          />
-        )}
-      </div>
+      </motion.div>
     );
   };
 
   const PostList = ({ items }: { items: AudioPost[] }) => (
-    <div className="space-y-4">
-      {items.map(post => <AudioPostCard key={post.id} post={post} />)}
+    <div className="space-y-2.5">
+      <AnimatePresence>
+        {items.map((post, i) => <AudioPostCard key={post.id} post={post} index={i} />)}
+      </AnimatePresence>
     </div>
   );
 
   return (
     <Layout showPlayer>
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-6 bg-card/50">
-            <TabsTrigger value="home" className="gap-2"><Home className="w-4 h-4" /><span className="hidden sm:inline">For You</span></TabsTrigger>
-            <TabsTrigger value="following" className="gap-2"><Users className="w-4 h-4" /><span className="hidden sm:inline">Following</span></TabsTrigger>
-            <TabsTrigger value="trending" className="gap-2"><TrendingUp className="w-4 h-4" /><span className="hidden sm:inline">Trending</span></TabsTrigger>
-          </TabsList>
+      <div className="relative min-h-screen">
+        {/* ── Rich glossy background ── */}
+        <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+          {/* Base gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#020d0b] via-[#050505] to-[#0d0805]" />
 
-          <TabsContent value="home" className="mt-0">
-            {loading ? (
-              <div className="text-center py-10">Loading podcasts...</div>
-            ) : posts.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">No public podcasts yet. Be the first to share!</div>
-            ) : (
-              <PostList items={posts} />
-            )}
-          </TabsContent>
+          {/* Primary teal glow — top left */}
+          <div className="absolute -top-32 -left-32 w-[700px] h-[700px] bg-[#3DDABA]/12 rounded-full blur-[160px] animate-pulse" style={{ animationDuration: '5s' }} />
+          {/* Orange accent — bottom right */}
+          <div className="absolute -bottom-40 -right-20 w-[600px] h-[600px] bg-[#F19861]/10 rounded-full blur-[140px] animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }} />
+          {/* Purple mid accent */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#7B5EA7]/8 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }} />
+          {/* Small teal top-right */}
+          <div className="absolute top-10 right-1/4 w-72 h-72 bg-[#3DDABA]/8 rounded-full blur-[80px] animate-pulse" style={{ animationDuration: '6s', animationDelay: '0.5s' }} />
 
-          <TabsContent value="following" className="mt-0">
-            {followingLoading ? (
-              <div className="text-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto" /></div>
-            ) : followingPosts.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">Nothing here yet</p>
-                <p className="text-sm">Follow creators on the Discover page to see their podcasts here.</p>
+          {/* Radial shimmer center */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_40%,rgba(61,218,186,0.07)_0%,transparent_70%)]" />
+
+          {/* Subtle mesh grid */}
+          <div className="absolute inset-0 opacity-[0.018]" style={{ backgroundImage: 'linear-gradient(rgba(61,218,186,1) 1px,transparent 1px),linear-gradient(90deg,rgba(61,218,186,1) 1px,transparent 1px)', backgroundSize: '60px 60px' }} />
+
+          {/* Light shafts */}
+          <div className="absolute top-0 left-1/3 w-px h-full bg-gradient-to-b from-[#3DDABA]/20 via-transparent to-transparent" />
+          <div className="absolute top-0 right-1/3 w-px h-full bg-gradient-to-b from-[#F19861]/12 via-transparent to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#3DDABA]/20 to-transparent" />
+
+          {/* Floating icons */}
+          {[
+            { Icon: Headphones, top: '8%', left: '6%', size: 40, dur: 8, delay: 0, rot: -12 },
+            { Icon: Mic, top: '12%', right: '8%', size: 32, dur: 6.5, delay: 1, rot: 8 },
+            { Icon: Radio, top: '65%', left: '4%', size: 36, dur: 9, delay: 0.5, rot: 15 },
+            { Icon: Music2, top: '75%', right: '6%', size: 28, dur: 7, delay: 2, rot: -8 },
+            { Icon: Sparkles, top: '30%', left: '2%', size: 24, dur: 5.5, delay: 1.5, rot: 6 },
+            { Icon: Volume2, top: '45%', right: '3%', size: 30, dur: 8.5, delay: 0.8, rot: -15 },
+            { Icon: Zap, top: '20%', left: '18%', size: 22, dur: 6, delay: 2.5, rot: 10 },
+            { Icon: Music, top: '80%', left: '22%', size: 26, dur: 7.5, delay: 1.2, rot: -6 },
+          ].map(({ Icon, top, left, right, size, dur, delay, rot }, i) => (
+            <div
+              key={i}
+              className="absolute text-primary/[0.06] pointer-events-none"
+              style={{
+                top, left, right,
+                animation: `float-icon ${dur}s ease-in-out ${delay}s infinite alternate`,
+              }}
+            >
+              <Icon style={{ width: size, height: size, transform: `rotate(${rot}deg)` }} />
+            </div>
+          ))}
+        </div>
+
+        <style>{`
+          @keyframes float-icon {
+            0%   { transform: translateY(0px) scale(1); }
+            100% { transform: translateY(-18px) scale(1.06); }
+          }
+        `}</style>
+
+        <div className="container px-4 py-6 max-w-6xl flex gap-24 ml-[10%]">
+          {/* Main Feed Column */}
+          <div className="flex-1 max-w-2xl">
+            {/* Pill Tab Bar */}
+            <div className="flex items-center justify-center mb-6">
+              <div className="flex items-center bg-white/[0.07] border border-white/[0.1] rounded-full p-1 gap-1 backdrop-blur-md">
+                {[
+                  { value: 'home', label: 'For You', icon: Home },
+                  { value: 'following', label: 'Following', icon: Users },
+                  { value: 'trending', label: 'Trending', icon: TrendingUp }
+                ].map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setActiveTab(value)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all relative",
+                      activeTab === value
+                        ? "text-primary scale-110"
+                        : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-white/5"
+                    )}
+                  >
+                    <Icon className={cn("w-3.5 h-3.5", activeTab === value && "drop-shadow-[0_0_10px_rgba(61,218,186,0.8)]")} />
+                    <span className={cn(activeTab === value && "drop-shadow-[0_0_8px_rgba(61,218,186,0.6)]")}>{label}</span>
+                  </button>
+                ))}
               </div>
-            ) : (
-              <PostList items={followingPosts} />
-            )}
-          </TabsContent>
+            </div>
 
-          <TabsContent value="trending" className="mt-0">
-            {trendingLoading ? (
-              <div className="text-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto" /></div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
-                  <TrendingUp className="w-4 h-4 text-primary" />
-                  Ranked by engagement + recency
+            {/* Tab Content */}
+            {activeTab === 'home' && (
+              loading ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <div className="relative"><div className="w-12 h-12 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /><div className="absolute inset-0 flex items-center justify-center"><Headphones className="w-5 h-5 text-primary animate-pulse" /></div></div>
                 </div>
-                <PostList items={trendingPosts.length > 0 ? trendingPosts : [...posts].sort((a, b) => ((b.likes * 2) + (b.comments * 3)) - ((a.likes * 2) + (a.comments * 3)))} />
-              </>
+              ) : posts.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-4"><Headphones className="w-7 h-7 text-muted-foreground/20" /></div>
+                  <p className="font-bold text-muted-foreground/40">No podcasts yet</p>
+                  <p className="text-xs text-muted-foreground/25 mt-1">Be the first to share something!</p>
+                </div>
+              ) : <PostList items={posts} />
             )}
-          </TabsContent>
-        </Tabs>
+
+            {activeTab === 'following' && (
+              followingLoading ? (
+                <div className="flex justify-center py-20"><div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /></div>
+              ) : followingPosts.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-4"><Users className="w-7 h-7 text-muted-foreground/20" /></div>
+                  <p className="font-bold text-muted-foreground/40">Nothing here yet</p>
+                  <p className="text-xs text-muted-foreground/25 mt-1">Follow creators on Discover to see their posts.</p>
+                </div>
+              ) : <PostList items={followingPosts} />
+            )}
+
+            {activeTab === 'trending' && (
+              trendingLoading ? (
+                <div className="flex justify-center py-20"><div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" /></div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3 text-[10px] font-bold text-muted-foreground/30 uppercase tracking-widest">
+                    <TrendingUp className="w-3 h-3 text-primary/50" />Ranked by engagement
+                  </div>
+                  <PostList items={trendingPosts.length > 0 ? trendingPosts : [...posts].sort((a, b) => ((b.likes * 2) + (b.comments * 3)) - ((a.likes * 2) + (a.comments * 3)))} />
+                </>
+              )
+            )}
+          </div>
+
+          {/* Right Sidebar - Suggested for you */}
+          <div className="hidden lg:block w-[320px] shrink-0">
+            <div className="sticky top-10 flex flex-col gap-8">
+              {/* Current User Profile Summary */}
+              {user && (
+                <RouterLink to="/profile" className="flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-primary/20 group-hover:border-primary/40 transition-all p-0.5">
+                      <img
+                        src={currentUserProfile?.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop"}
+                        alt="My Profile"
+                        className="w-full h-full object-cover rounded-full"
+                      />
+                    </div>
+                    <div>
+                      <p className="font-black text-sm group-hover:text-primary transition-colors">
+                        {currentUserProfile?.full_name || user.email?.split('@')[0] || "My Account"}
+                      </p>
+                      <p className="text-xs text-muted-foreground/40 font-medium">
+                        @{currentUserProfile?.username || ("user_" + user.id.substring(0, 5))}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-tighter text-primary/60">Switch</span>
+                </RouterLink>
+              )}
+
+              {/* Suggestions List */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-xs font-black text-muted-foreground/50 uppercase tracking-widest flex items-center gap-2">
+                    <Sparkles className="w-3 h-3 text-primary" />
+                    Suggested for you
+                  </h3>
+                  <RouterLink to="/discover" className="text-[10px] font-black text-foreground/80 hover:text-primary transition-colors">See All</RouterLink>
+                </div>
+
+                <div className="space-y-4">
+                  {suggestionsLoading ? (
+                    [...Array(3)].map((_, i) => (
+                      <div key={i} className="flex items-center justify-between opacity-50 animate-pulse">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-white/10" />
+                          <div className="space-y-1.5">
+                            <div className="w-20 h-2 bg-white/10 rounded" />
+                            <div className="w-12 h-1.5 bg-white/5 rounded" />
+                          </div>
+                        </div>
+                        <div className="w-12 h-6 bg-white/5 rounded-full" />
+                      </div>
+                    ))
+                  ) : suggestedUsers.length > 0 ? (
+                    suggestedUsers.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between group">
+                        <RouterLink to={`/profile/${item.id}`} className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full overflow-hidden border border-white/5 group-hover:border-primary/30 transition-all p-0.5">
+                            <img src={item.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop"} alt={item.full_name} className="w-full h-full object-cover rounded-full" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs truncate max-w-[120px] group-hover:text-primary transition-colors">{item.full_name || item.username}</p>
+                            <p className="text-[10px] text-muted-foreground/40 font-medium truncate max-w-[120px]">Suggested for you</p>
+                          </div>
+                        </RouterLink>
+                        <button
+                          onClick={() => handleSidebarFollow(item.id)}
+                          className="text-[10px] font-black text-primary hover:text-white hover:bg-primary/20 px-3 py-1 rounded-full transition-all border border-primary/20"
+                        >
+                          Follow
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground/30 text-center py-4 bg-white/[0.02] rounded-xl border border-dashed border-white/5">No suggestions available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer Links (Mini) */}
+              <div className="px-1 pt-4 border-t border-white/[0.03]">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-bold text-muted-foreground/40 uppercase tracking-tighter">
+                  <RouterLink to="/about" className="hover:text-primary transition-colors">About</RouterLink>
+                  <RouterLink to="/terms" className="hover:text-primary transition-colors">Help</RouterLink>
+                  <RouterLink to="/privacy" className="hover:text-primary transition-colors">Privacy</RouterLink>
+                  <RouterLink to="/terms" className="hover:text-primary transition-colors">Terms</RouterLink>
+                </div>
+                <p className="text-[9px] font-black text-muted-foreground/20 mt-4 tracking-widest">© 2026 AUDIORA FROM META</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Messages Pill & Window */}
+        <div className="fixed bottom-6 right-[60px] z-[60]">
+          <AnimatePresence>
+            {isChatOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.9, x: 20 }}
+                animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+                exit={{ opacity: 0, y: 20, scale: 0.9, x: 20 }}
+                className="absolute bottom-16 right-0 w-[360px] h-[520px] bg-black/60 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-[0_24px_48px_-12px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden"
+              >
+                {/* Chat Header */}
+                <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                  <div className="flex items-center gap-3">
+                    {activeConvId && (
+                      <button
+                        onClick={() => setActiveConvId(null)}
+                        className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                      >
+                        <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    )}
+                    <h3 className="font-black text-sm tracking-tight">
+                      {activeConvId ? chatConversations.find(c => c.id === activeConvId)?.otherName : "Messages"}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
+                      <Search className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button
+                      onClick={() => setIsChatOpen(false)}
+                      className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                    >
+                      <X className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chat Content */}
+                <div className="flex-1 overflow-y-auto">
+                  {!activeConvId ? (
+                    /* Conversation List */
+                    <div className="flex flex-col">
+                      {chatConversations.length > 0 ? (
+                        chatConversations.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => setActiveConvId(c.id)}
+                            className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.07] transition-all text-left border-b border-white/[0.02] active:bg-white/[0.1]"
+                          >
+                            <img src={c.otherAvatar} alt="" className="w-12 h-12 rounded-full object-cover border border-white/10 shadow-lg" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <p className="font-bold text-sm truncate">{c.otherName}</p>
+                                <p className="text-[10px] text-muted-foreground/30">{c.lastMessageAt}</p>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground/50 truncate font-medium">{c.lastMessage}</p>
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-20 px-10 text-center">
+                          <div className="w-16 h-16 rounded-full bg-white/[0.03] flex items-center justify-center mb-4">
+                            <MessageSquare className="w-8 h-8 text-muted-foreground/20" />
+                          </div>
+                          <p className="font-bold text-sm text-muted-foreground/40">No conversations yet</p>
+                          <p className="text-[10px] text-muted-foreground/20 mt-1">Direct message someone to start chatting!</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Active Chat Messages */
+                    <div className="flex flex-col p-4 space-y-4">
+                      {isMessagesLoading ? (
+                        <div className="flex items-center justify-center py-10">
+                          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        chatMessages.map((m) => {
+                          const isMe = m.sender_id === user?.id;
+                          return (
+                            <div key={m.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+                              <div className={cn(
+                                "max-w-[75%] px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm",
+                                isMe
+                                  ? "bg-primary text-black font-semibold rounded-br-sm"
+                                  : "bg-white/[0.08] text-foreground border border-white/5 rounded-bl-sm"
+                              )}>
+                                {m.content}
+                                <p className={cn("text-[8px] mt-1.5 opacity-40", isMe ? "text-right" : "text-left")}>
+                                  {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Input (only in chat view) */}
+                {activeConvId && (
+                  <div className="p-4 border-t border-white/5 bg-white/[0.02]">
+                    <div className="flex items-center gap-2 bg-white/[0.05] border border-white/10 rounded-2xl px-3 py-1.5 focus-within:border-primary/40 transition-all">
+                      <input
+                        className="flex-1 bg-transparent text-[13px] placeholder:text-muted-foreground/30 focus:outline-none py-1"
+                        placeholder="Type a message..."
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSendChatMessage(); }}
+                      />
+                      <button
+                        onClick={handleSendChatMessage}
+                        disabled={!chatInput.trim() || chatSending}
+                        className={cn(
+                          "p-2 rounded-xl transition-all",
+                          chatInput.trim() ? "text-primary hover:bg-primary/10" : "text-muted-foreground/20"
+                        )}
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className="flex items-center gap-3 bg-white/[0.08] hover:bg-white/[0.12] backdrop-blur-xl border border-white/[0.1] rounded-full px-5 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_15px_rgba(61,218,186,0.1)] transition-all hover:scale-105 active:scale-95 group"
+          >
+            <div className="flex items-center gap-2.5">
+              <MessageSquare className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-black tracking-tight text-foreground">Messages</span>
+            </div>
+
+            {/* Mini Avatar Stack */}
+            <div className="flex -space-x-2.5 ml-1">
+              {(suggestedUsers.length > 0 ? suggestedUsers.slice(0, 3) : [...Array(3)]).map((u, i) => (
+                <div
+                  key={i}
+                  className="w-6 h-6 rounded-full border-2 border-[#121212] overflow-hidden bg-white/5"
+                  style={{ zIndex: 3 - i }}
+                >
+                  {u?.avatar_url ? (
+                    <img src={u.avatar_url} alt="User" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-primary/20 flex items-center justify-center text-[8px] font-bold text-primary">
+                      {i + 1}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </button>
+        </div>
       </div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

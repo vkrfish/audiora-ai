@@ -11,7 +11,10 @@ import {
   ArrowRight,
   Headphones,
   Radio,
-  MessageSquare
+  MessageSquare,
+  Music2,
+  Volume2,
+  Music
 } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import Waveform from "@/components/audio/Waveform";
@@ -107,11 +110,61 @@ const Index = () => {
     <Layout hideNav>
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Animated background */}
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse-soft" />
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/15 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: '1s' }} />
+        {/* ── Rich glossy background ── */}
+        <div className="absolute inset-0 overflow-hidden">
+          {/* Base gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#020d0b] via-[#050505] to-[#0d0805]" />
+
+          {/* Primary teal glow — top left */}
+          <div className="absolute -top-32 -left-32 w-[700px] h-[700px] bg-[#3DDABA]/12 rounded-full blur-[160px] animate-pulse" style={{ animationDuration: '5s' }} />
+          {/* Orange accent — bottom right */}
+          <div className="absolute -bottom-40 -right-20 w-[600px] h-[600px] bg-[#F19861]/10 rounded-full blur-[140px] animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }} />
+          {/* Purple mid accent */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#7B5EA7]/8 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }} />
+          {/* Small teal top-right */}
+          <div className="absolute top-10 right-1/4 w-72 h-72 bg-[#3DDABA]/8 rounded-full blur-[80px] animate-pulse" style={{ animationDuration: '6s', animationDelay: '0.5s' }} />
+
+          {/* Radial shimmer center */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_40%,rgba(61,218,186,0.07)_0%,transparent_70%)]" />
+
+          {/* Subtle mesh grid */}
+          <div className="absolute inset-0 opacity-[0.018]" style={{ backgroundImage: 'linear-gradient(rgba(61,218,186,1) 1px,transparent 1px),linear-gradient(90deg,rgba(61,218,186,1) 1px,transparent 1px)', backgroundSize: '60px 60px' }} />
+
+          {/* Light shafts */}
+          <div className="absolute top-0 left-1/3 w-px h-full bg-gradient-to-b from-[#3DDABA]/20 via-transparent to-transparent" />
+          <div className="absolute top-0 right-1/3 w-px h-full bg-gradient-to-b from-[#F19861]/12 via-transparent to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#3DDABA]/20 to-transparent" />
+
+          {/* Floating icons */}
+          {[
+            { Icon: Headphones, top: '8%', left: '6%', size: 40, dur: 8, delay: 0, rot: -12 },
+            { Icon: Mic, top: '12%', right: '8%', size: 32, dur: 6.5, delay: 1, rot: 8 },
+            { Icon: Radio, top: '65%', left: '4%', size: 36, dur: 9, delay: 0.5, rot: 15 },
+            { Icon: Music2, top: '75%', right: '6%', size: 28, dur: 7, delay: 2, rot: -8 },
+            { Icon: Sparkles, top: '30%', left: '2%', size: 24, dur: 5.5, delay: 1.5, rot: 6 },
+            { Icon: Volume2, top: '45%', right: '3%', size: 30, dur: 8.5, delay: 0.8, rot: -15 },
+            { Icon: Zap, top: '20%', left: '18%', size: 22, dur: 6, delay: 2.5, rot: 10 },
+            { Icon: Music, top: '80%', left: '22%', size: 26, dur: 7.5, delay: 1.2, rot: -6 },
+          ].map(({ Icon, top, left, right, size, dur, delay, rot }, i) => (
+            <div
+              key={i}
+              className="absolute text-primary/[0.07] pointer-events-none"
+              style={{
+                top, left, right,
+                animation: `float-icon ${dur}s ease-in-out ${delay}s infinite alternate`,
+              }}
+            >
+              <Icon style={{ width: size, height: size, transform: `rotate(${rot}deg)` }} />
+            </div>
+          ))}
         </div>
+
+        <style>{`
+          @keyframes float-icon {
+            0%   { transform: translateY(0px) scale(1); }
+            100% { transform: translateY(-18px) scale(1.06); }
+          }
+        `}</style>
 
         <div className="container mx-auto px-4 py-20 relative z-10">
           <div className="max-w-4xl mx-auto text-center">

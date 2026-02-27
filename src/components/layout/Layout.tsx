@@ -23,7 +23,7 @@ const Layout = ({ children, showPlayer = false, hideNav = false }: LayoutProps) 
       {!hideNav && <Navbar />}
 
       {/* Main Content */}
-      <main className={`relative z-10 ${!hideNav ? 'pt-14' : ''} ${showPlayer ? 'pb-32 md:pb-24' : 'pb-20 md:pb-0'}`}>
+      <main className={`relative z-10 ${!hideNav ? 'pt-14 md:pt-0 md:pl-[68px]' : ''} ${showPlayer ? 'pb-32 md:pb-24' : 'pb-20 md:pb-0'}`}>
         <div className="animate-in fade-in duration-700 ease-out">
           {children}
         </div>
