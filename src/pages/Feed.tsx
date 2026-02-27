@@ -899,7 +899,7 @@ const Feed = () => {
           }
         `}</style>
 
-        <div className="container px-4 py-6 max-w-6xl flex gap-24 ml-[10%]">
+        <div className="container px-4 py-6 max-w-6xl flex flex-col lg:flex-row lg:gap-24 lg:ml-[10%]">
           {/* Main Feed Column */}
           <div className="flex-1 max-w-2xl">
             {/* Pill Tab Bar */}
@@ -916,12 +916,12 @@ const Feed = () => {
                     className={cn(
                       "flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all relative",
                       activeTab === value
-                        ? "text-primary scale-110"
+                        ? "lg:bg-transparent lg:text-primary lg:scale-110 bg-white/10 text-foreground"
                         : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-white/5"
                     )}
                   >
-                    <Icon className={cn("w-3.5 h-3.5", activeTab === value && "drop-shadow-[0_0_10px_rgba(61,218,186,0.8)]")} />
-                    <span className={cn(activeTab === value && "drop-shadow-[0_0_8px_rgba(61,218,186,0.6)]")}>{label}</span>
+                    <Icon className={cn("w-3.5 h-3.5", activeTab === value && "lg:drop-shadow-[0_0_10px_rgba(61,218,186,0.8)]")} />
+                    <span className={cn(activeTab === value && "lg:drop-shadow-[0_0_8px_rgba(61,218,186,0.6)]")}>{label}</span>
                   </button>
                 ))}
               </div>
@@ -1060,7 +1060,7 @@ const Feed = () => {
         </div>
 
         {/* Floating Messages Pill & Window */}
-        <div className="fixed bottom-6 right-[60px] z-[60]">
+        <div className="hidden lg:block fixed bottom-6 right-[60px] z-[60]">
           <AnimatePresence>
             {isChatOpen && (
               <motion.div
