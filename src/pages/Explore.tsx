@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAudio } from "@/contexts/AudioContext";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import PodcastReels from "@/components/audio/PodcastReels";
 
 const CATEGORIES = [
     { id: "all", label: "All" },
@@ -74,7 +75,7 @@ interface ExplorePodcast {
 }
 
 const ExploreTile = ({
-    pod, sizeClass, isFirst, allPods, user, liked
+    pod, sizeClass, isFirst, allPods, user, liked, onSelect
 }: {
     pod: ExplorePodcast;
     sizeClass: string;
@@ -82,6 +83,7 @@ const ExploreTile = ({
     allPods?: ExplorePodcast[];
     user: any;
     liked: boolean;
+    onSelect: () => void;
 }) => {
     const audio = useAudio();
     const navigate = useNavigate();
@@ -131,7 +133,7 @@ const ExploreTile = ({
             )}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            onClick={() => navigate(`/podcast/${pod.id}`)}
+            onClick={onSelect}
         >
             <img
                 src={coverUrl}
@@ -191,6 +193,8 @@ const Explore = () => {
     const [filtered, setFiltered] = useState<ExplorePodcast[]>([]);
     const [loading, setLoading] = useState(true);
     const [userLikedIds, setUserLikedIds] = useState<Set<string>>(new Set());
+    const [showReels, setShowReels] = useState(false);
+    const [reelsStartIndex, setReelsStartIndex] = useState(0);
     const { user } = useAuth();
     const navigate = useNavigate();
 
@@ -365,11 +369,34 @@ const Explore = () => {
                                 allPods={filtered}
                                 user={user}
                                 liked={userLikedIds.has(pod.id)}
+                                onSelect={() => {
+                                    setReelsStartIndex(i);
+                                    setShowReels(true);
+                                }}
                             />
                         ))}
                     </div>
                 )}
             </div>
+
+            {showReels && (
+                <PodcastReels
+                    podcasts={filtered.map(p => ({
+                        id: p.id,
+                        title: p.title,
+                        description: p.description,
+                        audioUrl: p.audioUrl,
+                        creatorName: p.creatorName,
+                        creatorId: p.creatorId,
+                        likes: p.likes,
+                        comments: p.comments,
+                        duration: p.duration,
+                        coverUrl: p.coverUrl || COVERS[p.coverIdx % COVERS.length]
+                    }))}
+                    initialIndex={reelsStartIndex}
+                    onClose={() => setShowReels(false)}
+                />
+            )}
         </Layout>
     );
 };

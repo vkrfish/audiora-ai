@@ -214,7 +214,7 @@ const Feed = () => {
             avatar: item.profiles?.avatar_url || "https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop",
             userId: item.user_id,
           },
-          coverUrl: item.cover_url || `https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8cG9kY2FzdHxlbnwwfHwwfHx8MA%3D%3D`,
+          coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop',
           durationStr: formatDuration(item.estimated_duration || 0),
           likes: item.likes_count || 0,
           comments: item.comments_count || 0,
@@ -323,7 +323,7 @@ const Feed = () => {
           const followingIds = follows.map((f: any) => f.following_id);
           const { data: fpods, error: podcastError } = await supabase
             .from('podcasts')
-            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, audio_files(file_url), profiles(full_name)')
+            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, cover_url, audio_files(file_url), profiles(full_name, username, avatar_url)')
             .in('user_id', followingIds)
             .order('created_at', { ascending: false });
 
@@ -337,11 +337,11 @@ const Feed = () => {
             caption: item.user_caption,
             creator: {
               name: item.profiles?.full_name || 'Unknown',
-              username: 'user_' + item.user_id.substring(0, 5),
-              avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
+              username: item.profiles?.username || ('user_' + item.user_id.substring(0, 5)),
+              avatar: item.profiles?.avatar_url || 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
               userId: item.user_id
             },
-            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
+            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop',
             durationStr: formatDuration(item.estimated_duration || 0),
             likes: item.likes_count || 0,
             comments: item.comments_count || 0,
@@ -364,7 +364,7 @@ const Feed = () => {
       const fetchTrending = async () => {
         try {
           const { data: tpods, error } = await supabase.from('trending_podcasts')
-            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, score, audio_files(file_url), profiles(full_name)')
+            .select('id, title, description, user_caption, type, estimated_duration, likes_count, comments_count, created_at, user_id, cover_url, score, audio_files(file_url), profiles(full_name, username, avatar_url)')
             .limit(20);
 
           if (error) throw error;
@@ -377,11 +377,11 @@ const Feed = () => {
             caption: item.user_caption,
             creator: {
               name: item.profiles?.full_name || 'Unknown',
-              username: 'user_' + item.user_id.substring(0, 5),
-              avatar: 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
+              username: item.profiles?.username || ('user_' + item.user_id.substring(0, 5)),
+              avatar: item.profiles?.avatar_url || 'https://images.unsplash.com/photo-1531297172866-cb8d50582515?w=100&h=100&fit=crop',
               userId: item.user_id
             },
-            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400&h=400&fit=crop',
+            coverUrl: item.cover_url || 'https://images.unsplash.com/photo-1620321023374-d1a1901c5cc1?q=80&w=600&h=400&auto=format&fit=crop',
             durationStr: formatDuration(item.estimated_duration || 0),
             likes: item.likes_count || 0,
             comments: item.comments_count || 0,

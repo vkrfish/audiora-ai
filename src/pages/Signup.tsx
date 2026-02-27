@@ -45,7 +45,7 @@ const Signup = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await signUp(email, password, name);
+      const { session, error } = await signUp(email, password, name);
 
       if (error) {
         if (error.message.includes('already registered') || error.message.includes('already exists')) {
@@ -56,8 +56,15 @@ const Signup = () => {
         return;
       }
 
-      toast.success("Account created successfully! Welcome to Audiora!");
-      navigate("/feed");
+      if (session) {
+        toast.success("Account created successfully! Welcome to Audiora!");
+        navigate("/feed");
+      } else {
+        toast.success("Account created! Please check your email to verify your account before logging in.", {
+          duration: 6000,
+        });
+        navigate("/login");
+      }
     } catch (error) {
       toast.error("An unexpected error occurred. Please try again.");
     } finally {

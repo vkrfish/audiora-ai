@@ -7,9 +7,17 @@ import { execFile } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { supabase } from './supabase.js';
+import multer from 'multer';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Configure multer for memory storage
+const upload = multer({ storage: multer.memoryStorage() });
 
 dotenv.config();
 
@@ -51,6 +59,48 @@ const requireAuth = async (req, res, next) => {
 
 // Initialize Google SDK for Audio (Gemini 2.0 Flash)
 const genAI = new GoogleGenerativeAI(process.env.VITE_GEMINI_API_KEY);
+
+// Endpoint to parse PDF/DOCX files
+app.post('/api/parse-document', requireAuth, upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const fileName = req.file.originalname.toLowerCase();
+        let extractedText = '';
+
+        if (fileName.endsWith('.pdf')) {
+            const data = await pdfParse(req.file.buffer);
+            extractedText = data.text;
+        } else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
+            const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+            extractedText = result.value;
+        } else if (fileName.endsWith('.txt')) {
+            extractedText = req.file.buffer.toString('utf8');
+        } else {
+            // For now, treat other files as text
+            extractedText = req.file.buffer.toString('utf8');
+        }
+
+        // Final safety check: if the text looks like binary (e.g. starts with PK)
+        if (extractedText.trim().startsWith('PK') && (fileName.endsWith('.docx') || fileName.endsWith('.doc'))) {
+            // Mammoth failed or it was the wrong format
+            return res.status(400).json({ error: 'Failed to extract text from the document. Please try converting it to PDF or pasting the text directly.' });
+        }
+
+        // Clean up text (remove excessive newlines, etc.)
+        const cleanedText = extractedText
+            .replace(/\n\s*\n/g, '\n\n')
+            .replace(/\r/g, '')
+            .trim();
+
+        res.json({ text: cleanedText });
+    } catch (error) {
+        console.error('Document parsing error:', error);
+        res.status(500).json({ error: 'Failed to parse document: ' + error.message });
+    }
+});
 
 // Endpoint to generate podcast script using OpenRouter (Step 3.5 Flash)
 app.post('/api/generate-script', requireAuth, async (req, res) => {

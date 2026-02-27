@@ -107,6 +107,10 @@ ${podcastType === 'conversation'
     sourceContent = fileContent;
   }
 
+  if (!sourceContent || sourceContent.trim().length < 10) {
+    throw new Error('No readable content found in the provided source. Please ensure your PDF contains text or try pasting the content directly.');
+  }
+
   const userPrompt = `Create a podcast script based on the following:
 
 ${sourceContent}
@@ -188,30 +192,47 @@ export const generateAudio = async (text: string, language: string = 'en', voice
   return response.json();
 };
 
-export const readFileContent = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      const result = e.target?.result;
-      if (typeof result === 'string') {
-        resolve(result);
-      } else {
-        reject(new Error('Failed to read file'));
-      }
-    };
-
-    reader.onerror = () => reject(new Error('Failed to read file'));
-
-    // For text files, read as text
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+export const readFileContent = async (file: File): Promise<string> => {
+  if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result;
+        if (typeof result === 'string') resolve(result);
+        else reject(new Error('Failed to read file'));
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsText(file);
-    } else {
-      // For PDF and DOCX, we'll just read as text for now
-      // In production, you'd want to use a proper parser
-      reader.readAsText(file);
+    });
+  }
+
+  // For PDF, DOCX, etc., use the backend parser
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/parse-document`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session?.access_token}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to parse document');
     }
-  });
+
+    const result = await response.json();
+    return result.text;
+  } catch (error: any) {
+    console.error("Document parsing error:", error);
+    throw new Error(error.message || "Failed to parse document. Please try a different file format.");
+  }
 };
 
 export const uploadImage = async (file: File, userId: string): Promise<string> => {

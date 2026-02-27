@@ -40,8 +40,8 @@ const Login = () => {
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
           toast.error("Invalid email or password. Please try again.");
-        } else if (error.message.includes('Email not confirmed')) {
-          toast.error("Please verify your email address first.");
+        } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          toast.error("Please verify your email address. Check your inbox for the confirmation link.");
         } else {
           toast.error(error.message);
         }

@@ -28,3 +28,11 @@ dist-ssr
 .env.local
 .env.*
 !.env.example
+
+# Server specific
+server/uploads/
+server/venv/
+server/__pycache__/
+server/**/*.pyc
+server/checkpoints_v2/
+server/openvoice/**/__pycache__/

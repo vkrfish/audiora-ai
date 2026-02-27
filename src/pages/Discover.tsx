@@ -33,7 +33,7 @@ const Discover = () => {
     const load = async () => {
       const [{ data: pods }, { data: users }] = await Promise.all([
         supabase.from('podcasts')
-          .select('id, title, description, estimated_duration, likes_count, created_at, audio_files!inner(file_url), profiles(full_name)')
+          .select('id, title, description, estimated_duration, likes_count, created_at, cover_url, audio_files!inner(file_url), profiles(full_name, username, avatar_url)')
           .eq('is_public', true)
           .order('likes_count', { ascending: false }).limit(8),
         supabase.from('profiles').select('id, full_name, username, avatar_url, followers_count, podcasts_count')
@@ -101,9 +101,9 @@ const Discover = () => {
     const dur = `${Math.floor((p.estimated_duration || 0) / 60)}:${((p.estimated_duration || 0) % 60).toString().padStart(2, '0')}`;
     const audioUrl = p.audio_files?.[0]?.file_url;
     return (
-      <div className="glass-card overflow-hidden group cursor-pointer" onClick={() => audioUrl && audio.playTrack({ id: p.id, title: p.title, creator: p.profiles?.full_name || 'Unknown', coverUrl: coverPodcast, audioUrl })}>
+      <div className="glass-card overflow-hidden group cursor-pointer" onClick={() => audioUrl && audio.playTrack({ id: p.id, title: p.title, creator: p.profiles?.full_name || p.profiles?.username || 'Unknown', coverUrl: p.cover_url || coverPodcast, audioUrl })}>
         <div className="relative aspect-video">
-          <img src={coverPodcast} alt={p.title} className="w-full h-full object-cover" />
+          <img src={p.cover_url || coverPodcast} alt={p.title} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
             <Play className="w-8 h-8 text-foreground" />
           </div>
@@ -111,7 +111,7 @@ const Discover = () => {
         </div>
         <div className="p-3">
           <p className="font-medium text-sm line-clamp-2">{p.title}</p>
-          <p className="text-xs text-muted-foreground mt-1">{p.profiles?.full_name || 'Unknown'} · {formatNum(p.likes_count || 0)} likes</p>
+          <p className="text-xs text-muted-foreground mt-1">{p.profiles?.full_name || p.profiles?.username || 'Unknown'} · {formatNum(p.likes_count || 0)} likes</p>
         </div>
       </div>
     );
