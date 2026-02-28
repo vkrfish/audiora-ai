@@ -30,6 +30,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.warn("Auth initialization safety timeout reached.");
     }, 5000);
 
+    // Check for demo bypass
+    const isDemoSession = localStorage.getItem('isDemoSession') === 'true';
+    if (isDemoSession) {
+      const mockUser = {
+        id: 'cd92eb52-d768-49a3-bfb8-98dbd080d6d4',
+        email: 'demo@audiora.ai',
+        user_metadata: { full_name: 'Demo Account' }
+      } as any;
+      setUser(mockUser);
+      setSession({ user: mockUser, access_token: 'demo-bypass-token' } as any);
+      setLoading(false);
+      clearTimeout(safetyTimeout);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
@@ -99,7 +114,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
+    localStorage.removeItem('isDemoSession');
     await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
   };
 
   return (

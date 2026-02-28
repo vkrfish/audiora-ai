@@ -117,17 +117,12 @@ ${sourceContent}
 
 Remember to output valid JSON only, no markdown code blocks.`;
 
-  let { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabase.auth.getSession();
+  let token = session?.access_token;
 
-  // Force a session refresh if token might be stale
-  if (session) {
-    const { data: refreshData } = await supabase.auth.refreshSession();
-    if (refreshData.session) {
-      session = refreshData.session;
-    }
+  if (!token && localStorage.getItem('isDemoSession') === 'true') {
+    token = 'demo-bypass-token';
   }
-
-  const token = session?.access_token;
 
   if (!token) {
     throw new Error('Authentication required. Please log in again.');
@@ -156,17 +151,15 @@ Remember to output valid JSON only, no markdown code blocks.`;
 export const generateAudio = async (text: string, language: string = 'en', voice?: string, voice2?: string): Promise<{ audioContent: string; mimeType: string }> => {
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-  let { data: { session } } = await supabase.auth.getSession();
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  let token = session?.access_token;
 
-  // Force a session refresh if token might be stale
-  if (session) {
-    const { data: refreshData } = await supabase.auth.refreshSession();
-    if (refreshData.session) {
-      session = refreshData.session;
-    }
+  if (!token && localStorage.getItem('isDemoSession') === 'true') {
+    token = 'demo-bypass-token';
+  } else if (sessionError) {
+    console.error('Session retrieval error:', sessionError);
+    throw new Error('Authentication required. Please log in again.');
   }
-
-  const token = session?.access_token;
 
   if (!token) {
     throw new Error('Authentication required. Please log in again.');
@@ -211,13 +204,19 @@ export const readFileContent = async (file: File): Promise<string> => {
   formData.append('file', file);
 
   const { data: { session } } = await supabase.auth.getSession();
+  let token = session?.access_token;
+
+  if (!token && localStorage.getItem('isDemoSession') === 'true') {
+    token = 'demo-bypass-token';
+  }
+
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/parse-document`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${session?.access_token}`
+        "Authorization": `Bearer ${token}`
       },
       body: formData
     });

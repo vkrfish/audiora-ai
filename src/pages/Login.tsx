@@ -15,11 +15,11 @@ const loginSchema = z.object({
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("demo@audiora.ai");
+  const [password, setPassword] = useState("demo123");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,9 +38,33 @@ const Login = () => {
       const { error } = await signIn(email, password);
 
       if (error) {
+        // Special handling for demo account: if sign in fails, attempt silent sign up
+        if (email === "demo@audiora.ai" && password === "demo123" && error.message.includes('Invalid login credentials')) {
+          const { error: signUpError, session: signUpSession } = await signUp(email, password, "Demo Account");
+
+          if (!signUpError) {
+            // If signup yields a session (auto-login enabled) or no error, proceed
+            toast.success("Demo account created and signed in!");
+            navigate("/feed");
+            return;
+          }
+
+          // If signup fails because user exists (race condition) or other error, show the original error
+          toast.error(signUpError.message);
+          return;
+        }
+
         if (error.message.includes('Invalid login credentials')) {
           toast.error("Invalid email or password. Please try again.");
         } else if (error.message.toLowerCase().includes('email not confirmed')) {
+          // Special bypass for demo account
+          if (email === "demo@audiora.ai" && password === "demo123") {
+            localStorage.setItem('isDemoSession', 'true');
+            toast.success("Demo session active!");
+            navigate("/feed");
+            window.location.reload(); // Force refresh to pick up demo state in useAuth
+            return;
+          }
           toast.error("Please verify your email address. Check your inbox for the confirmation link.");
         } else {
           toast.error(error.message);

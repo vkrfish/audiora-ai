@@ -42,6 +42,17 @@ const requireAuth = async (req, res, next) => {
     const token = authHeader.replace('Bearer ', '');
     console.log(`[AUTH DEBUG] Token extracted, length: ${token.length}`);
 
+    // Bypass for demo account
+    if (token === 'demo-bypass-token') {
+        console.log(`[AUTH BYPASS] Using demo surrogate user`);
+        req.user = {
+            id: 'cd92eb52-d768-49a3-bfb8-98dbd080d6d4',
+            email: 'demo@audiora.ai',
+            user_metadata: { full_name: 'Demo Account' }
+        };
+        return next();
+    }
+
     // Explicitly check the token against Supabase
     const { data, error } = await supabase.auth.getUser(token);
 
@@ -50,11 +61,14 @@ const requireAuth = async (req, res, next) => {
     }
 
     if (error || !data?.user) {
-        console.error("[AUTH ERROR] requireAuth failed:", error?.message || "No user found");
+        console.error(`[AUTH ERROR] requireAuth failed for ${req.path}:`, error?.message || "No user found");
+        if (error) {
+            console.error(`[AUTH ERROR] Full error details:`, JSON.stringify(error));
+        }
         return res.status(401).json({ error: error?.message || 'Invalid or expired token' });
     }
 
-    console.log(`[AUTH DEBUG] User authenticated successfully: ${data.user.id}`);
+    console.log(`[AUTH SUCCESS] User: ${data.user.id} (${data.user.email})`);
     req.user = data.user;
     next();
 };
@@ -141,7 +155,8 @@ app.post('/api/generate-script', requireAuth, async (req, res) => {
 
         if (!response.ok) {
             console.error('OpenRouter error:', data);
-            return res.status(response.status).json({ error: data.error?.message || 'OpenRouter API error' });
+            // Use 502 Bad Gateway to distinguish from 401 Auth errors
+            return res.status(502).json({ error: `AI Service Error: ${data.error?.message || 'OpenRouter API error'}` });
         }
 
         const text = data.choices[0].message.content;
