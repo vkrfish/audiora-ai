@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
 interface GeneratePodcastParams {
-  inputType: 'topic' | 'content' | 'file' | 'record';
+  inputType: 'topic' | 'content' | 'file' | 'audio' | 'record';
   topic?: string;
   content?: string;
   fileContent?: string;

@@ -21,7 +21,10 @@ import {
   Users,
   User,
   MessageSquare,
-  Volume2
+  Volume2,
+  Trash2,
+  Music2,
+  Image as ImageIcon
 } from "lucide-react";
 import Layout from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
@@ -54,7 +57,7 @@ import { savePodcastToSupabase } from "@/lib/podcast-api";
 import { useCreation } from "@/contexts/CreationContext";
 
 
-type InputType = "topic" | "content" | "file" | "record";
+type InputType = "topic" | "content" | "file" | "record" | "audio";
 type GenerationStep = "input" | "options" | "generating" | "review" | "complete";
 
 interface GeneratedPodcast {
@@ -100,6 +103,7 @@ const Create = () => {
   const currentStepIndex = steps.indexOf(step);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedAudioFile, setUploadedAudioFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
   const [coverImage, setCoverImage] = useState<File | null>(null);
@@ -283,16 +287,29 @@ const Create = () => {
     if (inputType === "content") return content.trim().length > 50;
     if (inputType === "file") return uploadedFile !== null;
     if (inputType === "record") return recordedAudio !== null;
+    if (inputType === "audio") return uploadedAudioFile !== null;
     return false;
   };
 
   const handleNextFromInput = () => {
-    if (inputType === "record") {
-      // Direct jump to options for recording
+    if (inputType === "audio") {
+      // Direct jump to generating for audio upload
+      setGeneratedPodcast({
+        title: uploadedAudioFile?.name.replace('.mp3', '') || "Uploaded Podcast",
+        description: shareCaption || "Self-uploaded audio content",
+        language: outputLanguage,
+        estimatedDuration: 0,
+        chapters: [],
+        fullScript: "Direct audio upload",
+        tags: [niche]
+      });
+      handleGenerateAudio();
+    } else if (inputType === "record") {
+      // For recording, we need to ensure generatedPodcast object exists for metadata
       if (!generatedPodcast) {
         setGeneratedPodcast({
           title: "My Recorded Podcast",
-          description: "A custom personal voice recording.",
+          description: shareCaption || "A custom personal voice recording.",
           language: outputLanguage,
           estimatedDuration: 0,
           chapters: [],
@@ -316,7 +333,7 @@ const Create = () => {
         audioContent: generatedPodcast.audioContent as string,
         audioMimeType: generatedPodcast.audioMimeType as string,
         niche,
-        type: inputType === "record" ? "recorded" : "generated",
+        type: (inputType === "record" || inputType === "audio") ? "recorded" : "generated",
         coverFile: coverImage || undefined,
         userCaption: isPublic ? shareCaption : undefined
       };
@@ -392,6 +409,28 @@ const Create = () => {
       setProgress(30);
       setProgressText("Converting script to audio...");
 
+      if (inputType === "audio" && uploadedAudioFile) {
+        // Process uploaded MP3 directly
+        const reader = new FileReader();
+        reader.readAsDataURL(uploadedAudioFile);
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          const base64str = base64data.split(',')[1];
+          setGeneratedPodcast({
+            ...generatedPodcast!,
+            audioContent: base64str,
+            audioMimeType: 'audio/mpeg',
+          });
+          setProgress(100);
+          setProgressText("Complete!");
+          setTimeout(() => setStep("complete"), 500);
+
+          // Load into player
+          audioPlayer.loadBase64Audio(base64str, 'audio/mpeg');
+        };
+        return;
+      }
+
       if (inputType === "record" && recordedAudio) {
         // Bypass TTS generation completely if recording
         const reader = new FileReader();
@@ -401,13 +440,16 @@ const Create = () => {
           // remove data:audio/webm;base64, prefix
           const base64str = base64data.split(',')[1];
           setGeneratedPodcast({
-            ...generatedPodcast,
+            ...generatedPodcast!,
             audioContent: base64str,
             audioMimeType: 'audio/webm',
           });
           setProgress(100);
           setProgressText("Complete!");
           setTimeout(() => setStep("complete"), 500);
+
+          // Load into player
+          audioPlayer.loadBase64Audio(base64str, 'audio/webm');
         };
         return;
       }
@@ -485,6 +527,15 @@ const Create = () => {
           <p className="text-muted-foreground text-sm max-w-lg leading-relaxed opacity-80">
             Topic, content, or upload. Audiora handles the rest.
           </p>
+        </div>
+        <div className="ml-auto">
+          <Button
+            onClick={() => setInputType('audio')}
+            className="rounded-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 gap-2 h-10 px-5 shadow-glow-sm transition-all active:scale-95"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="font-bold text-xs uppercase tracking-widest">Quick Upload MP3</span>
+          </Button>
         </div>
       </div>
 
@@ -725,6 +776,83 @@ const Create = () => {
               <p className="text-[10px] text-muted-foreground mt-4 font-medium uppercase tracking-widest opacity-50">
                 Voice as source
               </p>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="audio" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="glass-card p-1 gradient-border rounded-2xl overflow-hidden shadow-xl">
+            <div className="bg-card/80 backdrop-blur-xl p-6 rounded-[0.9rem] space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* MP3 Upload */}
+                <div className="space-y-3">
+                  <Label className="text-xs font-black uppercase tracking-widest opacity-60">Audio File (.mp3)</Label>
+                  {!uploadedAudioFile ? (
+                    <label className="group flex flex-col items-center justify-center border-2 border-dashed border-border/20 rounded-xl p-8 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-all duration-300">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 transition-transform group-hover:scale-110 shadow-inner">
+                        <Upload className="w-6 h-6 text-primary" />
+                      </div>
+                      <p className="text-sm font-bold mb-1">Upload MP3</p>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".mp3"
+                        onChange={(e) => setUploadedAudioFile(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                  ) : (
+                    <div className="flex items-center justify-between p-4 bg-secondary/40 border border-primary/20 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <Music2 className="w-5 h-5 text-primary" />
+                        <div>
+                          <p className="font-bold text-sm truncate max-w-[150px]">{uploadedAudioFile.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{(uploadedAudioFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon-sm" onClick={() => setUploadedAudioFile(null)}><X className="w-4 h-4" /></Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cover Image Upload */}
+                <div className="space-y-3">
+                  <Label className="text-xs font-black uppercase tracking-widest opacity-60">Cover Image</Label>
+                  {!coverImage ? (
+                    <label className="group flex flex-col items-center justify-center border-2 border-dashed border-border/20 rounded-xl p-8 cursor-pointer hover:border-accent/40 hover:bg-accent/5 transition-all duration-300">
+                      <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center mb-4 transition-transform group-hover:scale-110 shadow-inner">
+                        <ImageIcon className="w-6 h-6 text-accent" />
+                      </div>
+                      <p className="text-sm font-bold mb-1">Upload Cover</p>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={handleCoverUpload}
+                      />
+                    </label>
+                  ) : (
+                    <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-border">
+                      <img src={coverPreview!} alt="Cover" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                        <Button variant="destructive" size="icon-sm" onClick={removeCover}><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Caption */}
+              <div className="space-y-3">
+                <Label className="text-xs font-black uppercase tracking-widest opacity-60">Caption / Description</Label>
+                <Textarea
+                  placeholder="Tell your listeners about this podcast..."
+                  value={shareCaption}
+                  onChange={(e) => setShareCaption(e.target.value)}
+                  className="min-h-[100px] bg-secondary/30 border-none rounded-xl p-4 text-sm"
+                  maxLength={500}
+                />
+                <p className="text-[10px] text-right text-muted-foreground">{shareCaption.length}/500</p>
+              </div>
             </div>
           </div>
         </TabsContent>
@@ -1055,11 +1183,11 @@ const Create = () => {
             )}
           </div>
 
-          {inputType === "record" && (
+          {inputType === "audio" && (
             <div className="flex items-center justify-center gap-2 py-4 px-6 bg-primary/5 border border-primary/20 rounded-2xl animate-pulse ring-1 ring-primary/20">
               <Sparkles className="w-4 h-4 text-primary" />
               <p className="text-[10px] text-primary font-black uppercase tracking-widest text-center">
-                Custom voice cloning active: Your recorded audio will be used instead.
+                Direct MP3 upload mode: Your high-quality audio file will be used as is.
               </p>
             </div>
           )}
@@ -1073,12 +1201,12 @@ const Create = () => {
           <Button
             variant="hero"
             size="lg"
-            onClick={inputType === "record" ? handleGenerateAudio : handleGenerate}
+            onClick={(inputType === "record" || inputType === "audio") ? handleGenerateAudio : handleGenerate}
             className="relative h-14 px-10 text-lg font-bold rounded-full gap-3 shadow-xl overflow-hidden transition-all duration-500 hover:scale-102 active:scale-98 group"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-[#3DDABA] to-[#F19861] opacity-100 group-hover:brightness-105 transition-all" />
             <span className="relative z-10 flex items-center gap-3 text-black font-semibold">
-              {inputType === "record" ? "Finalize" : "Continue"}
+              {(inputType === "record" || inputType === "audio") ? "Finalize" : "Continue"}
               <ChevronRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
             </span>
           </Button>

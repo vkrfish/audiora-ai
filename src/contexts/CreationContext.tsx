@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-type InputType = "topic" | "content" | "file" | "record";
+type InputType = "topic" | "content" | "file" | "record" | "audio";
 type GenerationStep = "input" | "options" | "generating" | "review" | "complete";
 
 interface GeneratedPodcast {
