@@ -111,11 +111,7 @@ ${podcastType === 'conversation'
     throw new Error('No readable content found in the provided source. Please ensure your PDF contains text or try pasting the content directly.');
   }
 
-  const userPrompt = `Create a podcast script based on the following:
-
-${sourceContent}
-
-Remember to output valid JSON only, no markdown code blocks.`;
+  const userPrompt = `Create a podcast script based on the following:\n\n${sourceContent}\n\nRemember to output valid JSON only, no markdown code blocks.`;
 
   const { data: { session } } = await supabase.auth.getSession();
   let token = session?.access_token;
@@ -139,10 +135,11 @@ Remember to output valid JSON only, no markdown code blocks.`;
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
-    }
-    throw new Error(errorData.error || `Backend error: ${response.status}`);
+    // Show the real backend error; only fall back to "session expired" for bare 401s with no message
+    const backendError = errorData.error || errorData.message;
+    if (backendError) throw new Error(backendError);
+    if (response.status === 401) throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
+    throw new Error(`Script generation failed (status ${response.status})`);
   }
 
   return response.json();
@@ -156,7 +153,7 @@ export const generateAudio = async (text: string, language: string = 'en', voice
 
   if (!token && localStorage.getItem('isDemoSession') === 'true') {
     token = 'demo-bypass-token';
-  } else if (sessionError) {
+  } else if (!token && sessionError) {
     console.error('Session retrieval error:', sessionError);
     throw new Error('Authentication required. Please log in again.');
   }
@@ -176,10 +173,11 @@ export const generateAudio = async (text: string, language: string = 'en', voice
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
-    }
-    throw new Error(errorData.error || `Backend error: ${response.status}`);
+    // Show the real backend error; only fall back to "session expired" for bare 401s with no message
+    const backendError = errorData.error || errorData.message;
+    if (backendError) throw new Error(backendError);
+    if (response.status === 401) throw new Error("Your authentication session has expired. Please log out and log back in to continue.");
+    throw new Error(`Audio generation failed (status ${response.status})`);
   }
 
   return response.json();
